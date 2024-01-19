@@ -1,5 +1,5 @@
-#ifndef SAVOUR_COMMON_H
-#define SAVOUR_COMMON_H
+#ifndef AND_COMMON_H
+#define AND_COMMON_H
 
 #include <stdint.h>
 
