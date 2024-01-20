@@ -15,8 +15,7 @@ set LinkLibs=SDL2main.lib SDL2.lib SDL2_image.lib SDL2_ttf.lib shell32.lib
 
 pushd %BuildDir%
 
-rem cl %SourceDir%\rayl_savour.cpp %SourceDir%\savour.cpp %CompilerOptions% %CompilerWarningOptions% /link %LinkOptions% %LinkLibs%
-cl %SourceDir%\sdl_savour.cpp %CompilerOptions% %CompilerWarningOptions% /link %LinkOptions% %LinkLibs%
+cl %SourceDir%\sdl_savour.cpp %SourceDir%\savour.cpp %CompilerOptions% %CompilerWarningOptions% /link %LinkOptions% %LinkLibs%
 
 popd
 
