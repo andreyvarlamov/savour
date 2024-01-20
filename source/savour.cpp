@@ -96,6 +96,15 @@ void BlitAlpha(image Source, rect SourceRect, image Dest, rect DestRect, vec3 Bg
             f32 DestRectXRatio = (f32) (ColumnI - DestRect.X) / (f32) (DestRect.Width);
 
             u32 ResultingPixel;
+            
+            u32 SourceX = SourceRect.X + (u32) (DestRectXRatio * SourceRect.Width);
+            u32 SourceY = SourceRect.Y + (u32) (DestRectYRatio * SourceRect.Height);
+            u32 *SourcePixel = SourcePixels + SourceY * Source.Width + SourceX;
+            // printf("D[%u,%u](%0.3f,%0.3f)->S[%u,%u]\n", ColumnI, RowI, DestRectXRatio, DestRectYRatio, SourceX, SourceY);
+            
+            ResultingPixel = *SourcePixel;
+            
+            #if 0
             if (!Bilinear)
             {
                 // Nearest neighbor
@@ -132,6 +141,7 @@ void BlitAlpha(image Source, rect SourceRect, image Dest, rect DestRect, vec3 Bg
                                                   InterpolatePixel(*Pixel10, *Pixel11, RatioX),
                                                   RatioY);
             }
+            #endif
             
             f32 SourceAlpha = (u8) ResultingPixel / 255.0f;
 
@@ -171,42 +181,49 @@ void GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, platfor
     ScreenImage.Pixels = OffscreenBuffer->ImageData;
     ScreenImage.Width = OffscreenBuffer->Width;
     ScreenImage.Height = OffscreenBuffer->Height;
-    
-    u32 AtlasWidth = 16;
-    u32 AtlasHeight = 16;
 
-    u32 DestPosition = 0;
-    for (u32 AtlasY = 0;
-         AtlasY < AtlasHeight;
-         ++AtlasY)
+    i32 MinX = -4;
+    i32 MinY = -4;
+    i32 MaxX = 4;
+    i32 MaxY = 4;
+
+    if (Platform_KeyJustPressed(GameInput, SDL_SCANCODE_L))
     {
-        for (u32 AtlasX = 0;
-             AtlasX < AtlasWidth;
-             ++AtlasX)
+        GameState->PlayerX++;
+        if (GameState->PlayerX > MaxX)
         {
-            SourceRect.X = 48 * AtlasX;
-            SourceRect.Y = 72 * AtlasY;
-
-            u32 DestX = DestPosition % 40;
-            u32 DestY = DestPosition / 40;
-
-            DestRect.X = 48 * DestX;
-            DestRect.Y = 72 * DestY;
-                
-            // BlitAlpha(GameState->FontAtlas, SourceRect, ScreenImage, DestRect, Vec3((rand() % 1000 / 1000.0f),(rand() % 1000 / 1000.0f),(rand() % 1000 / 1000.0f)), Vec3((rand() % 1000 / 1000.0f),(rand() % 1000 / 1000.0f),(rand() % 1000 / 1000.0f)), GameState->IsBilinear);
-            BlitAlpha(GameState->FontAtlas, SourceRect, ScreenImage, DestRect, Vec3(1), Vec3(0), GameState->IsBilinear);
-
-            DestPosition++;
+            GameState->PlayerX = MinX;
         }
     }
-        
-    if (GameState->FrameCount > 100)
+    if (Platform_KeyJustPressed(GameInput, SDL_SCANCODE_H))
     {
-        GameState->IsBilinear = !GameState->IsBilinear;
-        GameState->FrameCount = 0;
+        GameState->PlayerX--;
+        if (GameState->PlayerX < MinX)
+        {
+            GameState->PlayerX = MaxX;
+        }
     }
-    else
+    if (Platform_KeyJustPressed(GameInput, SDL_SCANCODE_J))
     {
-        GameState->FrameCount++;
+        GameState->PlayerY--;
+        if (GameState->PlayerY < MinY)
+        {
+            GameState->PlayerY = MaxY;
+        }
     }
+    if (Platform_KeyJustPressed(GameInput, SDL_SCANCODE_K))
+    {
+        GameState->PlayerY++;
+        if (GameState->PlayerY > MaxY)
+        {
+            GameState->PlayerY = MinY;
+        }
+    }
+
+    u32 MiddleRectX = 912;
+    u32 MiddleRectY = 504;
+    DestRect.X = MiddleRectX + GameState->PlayerX * 48;
+    DestRect.Y = MiddleRectY + -GameState->PlayerY * 72;
+    
+    BlitAlpha(GameState->FontAtlas, SourceRect, ScreenImage, DestRect, Vec3(1), Vec3(0), GameState->IsBilinear);
 }

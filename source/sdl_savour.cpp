@@ -9,6 +9,8 @@
 
 #include "savour_platform.h"
 
+internal void UpdateInput(game_input *GameInput);
+
 int main(int argc, char **argv)
 {
     i32 SDLInitResult = SDL_Init(SDL_INIT_VIDEO);
@@ -43,7 +45,7 @@ int main(int argc, char **argv)
                                                       OffscreenBuffer.Height);
     Assert(OffscreenTexture);
 
-    game_input GameInput = {};
+    game_input *GameInput = (game_input *) calloc(1, sizeof(game_input));
     game_memory GameMemory = {};
     GameMemory.StorageSize = Megabytes(64);
     GameMemory.Storage = calloc(1, GameMemory.StorageSize);
@@ -70,9 +72,15 @@ int main(int argc, char **argv)
         }
 
         //
+        // NOTE: Update input
+        //
+        UpdateInput(GameInput);
+        GameInput->DeltaTime = (f32) PrevFrameDeltaTimeSec;
+
+        //
         // NOTE: Run game
         //
-        GameUpdateAndRender(&GameInput, &GameMemory, &OffscreenBuffer, &ShouldQuit);
+        GameUpdateAndRender(GameInput, &GameMemory, &OffscreenBuffer, &ShouldQuit);
 
         //
         // NOTE: Flip buffer
@@ -82,6 +90,14 @@ int main(int argc, char **argv)
         // TODO INVESTIGATE: is there double double buffer? We're copying, and then "presenting"
         SDL_RenderCopy(Renderer, OffscreenTexture, NULL, NULL);
         SDL_RenderPresent(Renderer);
+        // NOTE: Clear offscreen buffer
+        u32 *Pixel = (u32 *) OffscreenBuffer.ImageData;
+        for (u32 PixelIndex = 0;
+             PixelIndex < OffscreenBuffer.Width * OffscreenBuffer.Height;
+             ++PixelIndex)
+        {
+            *Pixel++ = 0;
+        }
 
         //
         // NOTE: Performance counter
@@ -104,7 +120,32 @@ int main(int argc, char **argv)
     return 0;
 }
 
-platform_image Platform_LoadBMP(const char *Path)
+internal void
+UpdateInput(game_input *GameInput)
+{
+    const u8 *SDLKeyboardState = SDL_GetKeyboardState(0);
+    for (u32 ScancodeIndex = 0;
+         ScancodeIndex < SDL_NUM_SCANCODES;
+         ++ScancodeIndex)
+    {
+        GameInput->PreviousKeyStates_[ScancodeIndex] = GameInput->CurrentKeyStates_[ScancodeIndex];
+        GameInput->CurrentKeyStates_[ScancodeIndex] = (SDLKeyboardState[ScancodeIndex] != 0);
+    }
+
+    u32 SDLMouseButtonState = SDL_GetMouseState(&GameInput->MouseX, &GameInput->MouseY);
+    for (u32 MouseButtonIndex = 0;
+         MouseButtonIndex < MouseButton_Count;
+         ++MouseButtonIndex)
+    {
+        GameInput->PreviousMouseButtonStates_[MouseButtonIndex] = GameInput->CurrentMouseButtonStates_[MouseButtonIndex];
+        GameInput->CurrentMouseButtonStates_[MouseButtonIndex] = (SDLMouseButtonState & SDL_BUTTON(MouseButtonIndex + 1));
+    }
+
+    SDL_GetRelativeMouseState(&GameInput->MouseDeltaX, &GameInput->MouseDeltaY);
+}
+
+platform_image
+Platform_LoadBMP(const char *Path)
 {
     platform_image Result = {};
     
@@ -120,7 +161,8 @@ platform_image Platform_LoadBMP(const char *Path)
     return Result;
 }
 
-void Platform_FreeImage(platform_image *PlatformImage)
+void
+Platform_FreeImage(platform_image *PlatformImage)
 {
     SDL_FreeSurface((SDL_Surface *) PlatformImage->PointerToFree_);
     PlatformImage->ImageData = 0;

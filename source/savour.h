@@ -27,7 +27,9 @@ struct game_state
 {
     image FontAtlas;
     b32 IsBilinear;
-    u32 FrameCount;
+
+    i32 PlayerX = 0;
+    i32 PlayerY = 0;
 };
 
 #endif
