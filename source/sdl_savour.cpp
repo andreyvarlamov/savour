@@ -91,12 +91,13 @@ int main(int argc, char **argv)
         SDL_RenderCopy(Renderer, OffscreenTexture, NULL, NULL);
         SDL_RenderPresent(Renderer);
         // NOTE: Clear offscreen buffer
+        // TODO: Move to game
         u32 *Pixel = (u32 *) OffscreenBuffer.ImageData;
         for (u32 PixelIndex = 0;
              PixelIndex < OffscreenBuffer.Width * OffscreenBuffer.Height;
              ++PixelIndex)
         {
-            *Pixel++ = 0;
+            *Pixel++ = 0xFF0000FF;
         }
 
         //

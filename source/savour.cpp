@@ -162,25 +162,86 @@ void GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, platfor
         srand((u32)time(NULL)); 
 
         GameState->FontAtlas = GetImageFromPlatformImage(Platform_LoadBMP("resources/font.bmp"));
+
+        GameState->MapWidth = 32;
+        GameState->MapHeight = 32;
+        for (u32 MapGlyphI = 0;
+             MapGlyphI < 1024;
+             ++MapGlyphI)
+        {
+            GameState->MapGlyphs[MapGlyphI] = (((rand() % 2) == 0) ? '#' : ',');
+        }
         
         GameMemory->IsInitialized = true;
     }
     
+    u32 ScreenGlyphWidth = 48;
+    u32 ScreenGlyphHeight = 72;
+    u32 AtlasGlyphWidth = 48;
+    u32 AtlasGlyphHeight = 72;
+
     rect SourceRect = {};
     SourceRect.X = 48;
     SourceRect.Y = 0;
-    SourceRect.Width = 48;
-    SourceRect.Height = 72;
+    SourceRect.Width = ScreenGlyphWidth;
+    SourceRect.Height = ScreenGlyphHeight;
     rect DestRect = {};
     DestRect.X = 0;
     DestRect.Y = 0;
-    DestRect.Width = 48;
-    DestRect.Height = 72;
+    DestRect.Width = AtlasGlyphWidth;
+    DestRect.Height = AtlasGlyphHeight;
 
     image ScreenImage = {};
     ScreenImage.Pixels = OffscreenBuffer->ImageData;
     ScreenImage.Width = OffscreenBuffer->Width;
     ScreenImage.Height = OffscreenBuffer->Height;
+
+    for (u32 MapGlyphI = 0;
+         MapGlyphI < 1024;
+         ++MapGlyphI)
+    {
+        DestRect.X = (MapGlyphI % GameState->MapWidth) * ScreenGlyphWidth;
+        DestRect.Y = (MapGlyphI / GameState->MapHeight) * ScreenGlyphHeight;
+
+        if (DestRect.X >= ScreenImage.Width)
+        {
+            continue;
+        }
+        else if (DestRect.X + DestRect.Width > ScreenImage.Width)
+        {
+            DestRect.Width = ScreenImage.Width - DestRect.X;
+        }
+        else
+        {
+            DestRect.Width = ScreenGlyphWidth;
+        }
+
+        if (DestRect.Y >= ScreenImage.Height)
+        {
+            continue;
+        }
+        else if (DestRect.Y + DestRect.Height > ScreenImage.Height)
+        {
+            DestRect.Height = ScreenImage.Height - DestRect.Y;
+        }
+        else
+        {
+            DestRect.Height = ScreenGlyphHeight;
+        }
+
+        if (GameState->MapGlyphs[MapGlyphI] == '#')
+        {
+            SourceRect.X = 144;
+            SourceRect.Y = 144;
+        }
+        else
+        {
+            SourceRect.X = 576;
+            SourceRect.Y = 144;
+        }
+
+        BlitAlpha(GameState->FontAtlas, SourceRect, ScreenImage, DestRect, Vec3(1), Vec3(0), false);
+    }
 
     i32 MinX = -4;
     i32 MinY = -4;
@@ -224,6 +285,9 @@ void GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, platfor
     u32 MiddleRectY = 504;
     DestRect.X = MiddleRectX + GameState->PlayerX * 48;
     DestRect.Y = MiddleRectY + -GameState->PlayerY * 72;
+
+    SourceRect.X = 48;
+    SourceRect.Y = 0;
     
     BlitAlpha(GameState->FontAtlas, SourceRect, ScreenImage, DestRect, Vec3(1), Vec3(0), GameState->IsBilinear);
 }

@@ -30,6 +30,15 @@ struct game_state
 
     i32 PlayerX = 0;
     i32 PlayerY = 0;
+
+    u32 MapGlyphs[1024];
+    u32 MapWidth;
+    u32 MapHeight;
+
+    u32 CameraX;
+    u32 CameraY;
+    u32 CameraWidth;
+    u32 CameraHeight;
 };
 
 #endif
