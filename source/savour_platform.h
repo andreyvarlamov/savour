@@ -15,6 +15,10 @@ struct game_input
 {
     u8 CurrentKeyStates_[SDL_NUM_SCANCODES];
     u8 PreviousKeyStates_[SDL_NUM_SCANCODES];
+
+    f32 KeyRepeatAccums_[SDL_NUM_SCANCODES];
+    f32 KeyRepeatPeriod_;
+    
     u8 CurrentMouseButtonStates_[MouseButton_Count];
     u8 PreviousMouseButtonStates_[MouseButton_Count];
 
@@ -71,6 +75,40 @@ Platform_KeyJustReleased(game_input *GameInput, u32 KeyScancode)
 {
     b32 Result = (!GameInput->CurrentKeyStates_[KeyScancode] && GameInput->PreviousKeyStates_[KeyScancode]);
     return Result;
+}
+
+inline b32
+Platform_KeyRepeat(game_input *GameInput, u32 KeyScancode)
+{
+    // TODO: Quick and dirty, probably best to remember latest pressed key and run the accumulator just for it,
+    // in the main UpdateInput routine, and then check it here
+    if (GameInput->CurrentKeyStates_[KeyScancode])
+    {
+        if (GameInput->PreviousKeyStates_[KeyScancode])
+        {
+            // NOTE: Key was already pressed, run key repeat
+            GameInput->KeyRepeatAccums_[KeyScancode] += GameInput->DeltaTime;
+            if (GameInput->KeyRepeatAccums_[KeyScancode] >= GameInput->KeyRepeatPeriod_)
+            {
+                GameInput->KeyRepeatAccums_[KeyScancode] = 0.0f;
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+        }
+        else
+        {
+            // NOTE: Key newly pressed, reset key repeat accumulator, and return true
+            GameInput->KeyRepeatAccums_[KeyScancode] =  0.0f;
+            return true;
+        }
+    }
+    else
+    {
+        return false;
+    }
 }
 
 inline b32

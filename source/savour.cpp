@@ -182,6 +182,8 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, platform_ima
 {
     game_state *GameState = (game_state *) GameMemory->Storage;
 
+    b32 PlayerMoved = false;
+    
     if (!GameMemory->IsInitialized)
     {
         // TODO: Temporary
@@ -212,6 +214,8 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, platform_ima
         GameState->CameraZoom = 1.0f;
         
         GameMemory->IsInitialized = true;
+
+        PlayerMoved = true;
     }
 
     if (Platform_KeyIsDown(GameInput, SDL_SCANCODE_ESCAPE))
@@ -239,6 +243,33 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, platform_ima
     ScreenImage.Pixels = OffscreenBuffer->ImageData;
     ScreenImage.Width = OffscreenBuffer->Width;
     ScreenImage.Height = OffscreenBuffer->Height;
+
+    if (Platform_KeyRepeat(GameInput, SDL_SCANCODE_H))
+    {
+        GameState->PlayerX--;
+        PlayerMoved = true;
+    }
+    if (Platform_KeyRepeat(GameInput, SDL_SCANCODE_L))
+    {
+        GameState->PlayerX++;
+        PlayerMoved = true;
+    }
+    if (Platform_KeyRepeat(GameInput, SDL_SCANCODE_K))
+    {
+        GameState->PlayerY--;
+        PlayerMoved = true;
+    }
+    if (Platform_KeyRepeat(GameInput, SDL_SCANCODE_J))
+    {
+        GameState->PlayerY++;
+        PlayerMoved = true;
+    }
+
+    if (PlayerMoved)
+    {
+        GameState->CameraOffsetX = (f32) (GameState->PlayerX * ScreenGlyphWidth) + (ScreenGlyphWidth / 2.0f) - (ScreenImage.Width / 2.0f);
+        GameState->CameraOffsetY = (f32) (GameState->PlayerY * ScreenGlyphHeight) + (ScreenGlyphHeight / 2.0f) - (ScreenImage.Height / 2.0f);
+    }
 
     for (i32 MapGlyphI = 0;
          MapGlyphI < 2048;
@@ -271,23 +302,11 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, platform_ima
         BlitAlpha(GameState->FontAtlas, SourceRect, ScreenImage, DestRect, Vec3(1), Vec3(0), false);
     }
 
-    f32 PixelsPerSecond = 200.0f;
-    if (Platform_KeyIsDown(GameInput, SDL_SCANCODE_H))
-    {
-        GameState->CameraOffsetX -= PixelsPerSecond * GameInput->DeltaTime;
-    }
-    if (Platform_KeyIsDown(GameInput, SDL_SCANCODE_L))
-    {
-        GameState->CameraOffsetX += PixelsPerSecond * GameInput->DeltaTime;
-    }
-    if (Platform_KeyIsDown(GameInput, SDL_SCANCODE_K))
-    {
-        GameState->CameraOffsetY -= PixelsPerSecond * GameInput->DeltaTime;
-    }
-    if (Platform_KeyIsDown(GameInput, SDL_SCANCODE_J))
-    {
-        GameState->CameraOffsetY += PixelsPerSecond * GameInput->DeltaTime;
-    }
+    DestRect.X = (i32) ((GameState->PlayerX * ScreenGlyphWidth - (i32) GameState->CameraOffsetX) * GameState->CameraZoom);
+    DestRect.Y = (i32) ((GameState->PlayerY * ScreenGlyphHeight - (i32) GameState->CameraOffsetY) * GameState->CameraZoom);
+    SourceRect.X = 0;
+    SourceRect.Y = 288;
+    BlitAlpha(GameState->FontAtlas, SourceRect, ScreenImage, DestRect, Vec3(0,1,0), Vec3(0), false);
 
     if (Platform_MouseButtonIsDown(GameInput, MouseButton_Middle))
     {
