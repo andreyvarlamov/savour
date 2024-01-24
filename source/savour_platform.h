@@ -6,8 +6,8 @@
 enum mouse_button_type
 {
     MouseButton_Left,
-    MouseButton_Right,
     MouseButton_Middle,
+    MouseButton_Right,
     MouseButton_Count,
 };
 
@@ -22,6 +22,10 @@ struct game_input
     i32 MouseY;
     i32 MouseDeltaX;
     i32 MouseDeltaY;
+    f32 MouseLogicalX;
+    f32 MouseLogicalY;
+    f32 MouseLogicalDeltaX;
+    f32 MouseLogicalDeltaY;
 
     f32 DeltaTime;
 };
@@ -36,8 +40,8 @@ struct game_memory
 
 struct platform_image
 {
-    u32 Width;
-    u32 Height;
+    i32 Width;
+    i32 Height;
     void *ImageData;
     void *PointerToFree_;
 };
@@ -49,7 +53,7 @@ platform_image Platform_LoadImage(const char *Path);
 void Platform_FreeImage(platform_image *PlatformImage);
 
 inline b32
-Platform_IsKeyDown(game_input *GameInput, u32 KeyScancode)
+Platform_KeyIsDown(game_input *GameInput, u32 KeyScancode)
 {
     b32 Result = GameInput->CurrentKeyStates_[KeyScancode];
     return Result;

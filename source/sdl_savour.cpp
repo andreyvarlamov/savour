@@ -9,7 +9,7 @@
 
 #include "savour_platform.h"
 
-internal void UpdateInput(game_input *GameInput);
+internal void UpdateInput(SDL_Renderer *Render, game_input *GameInput);
 
 int main(int argc, char **argv)
 {
@@ -30,8 +30,8 @@ int main(int argc, char **argv)
     Assert(Renderer);
     
     platform_image OffscreenBuffer = {};
-    OffscreenBuffer.Width = (u32) ClientWidth;
-    OffscreenBuffer.Height = (u32) ClientHeight;
+    OffscreenBuffer.Width = ClientWidth;
+    OffscreenBuffer.Height = ClientHeight;
     u32 BytesPerPixel = 4;
     OffscreenBuffer.ImageData = calloc(1, OffscreenBuffer.Width * OffscreenBuffer.Height * BytesPerPixel);
     Assert(OffscreenBuffer.ImageData);
@@ -74,7 +74,7 @@ int main(int argc, char **argv)
         //
         // NOTE: Update input
         //
-        UpdateInput(GameInput);
+        UpdateInput(Renderer, GameInput);
         GameInput->DeltaTime = (f32) PrevFrameDeltaTimeSec;
 
         //
@@ -93,7 +93,7 @@ int main(int argc, char **argv)
         // NOTE: Clear offscreen buffer
         // TODO: Move to game
         u32 *Pixel = (u32 *) OffscreenBuffer.ImageData;
-        for (u32 PixelIndex = 0;
+        for (i32 PixelIndex = 0;
              PixelIndex < OffscreenBuffer.Width * OffscreenBuffer.Height;
              ++PixelIndex)
         {
@@ -122,7 +122,7 @@ int main(int argc, char **argv)
 }
 
 internal void
-UpdateInput(game_input *GameInput)
+UpdateInput(SDL_Renderer *Renderer, game_input *GameInput)
 {
     const u8 *SDLKeyboardState = SDL_GetKeyboardState(0);
     for (u32 ScancodeIndex = 0;
@@ -143,6 +143,19 @@ UpdateInput(game_input *GameInput)
     }
 
     SDL_GetRelativeMouseState(&GameInput->MouseDeltaX, &GameInput->MouseDeltaY);
+
+    // HACK
+    f32 X, Y;
+    SDL_RenderWindowToLogical(Renderer, 
+                              GameInput->MouseX + GameInput->MouseDeltaX, GameInput->MouseY + GameInput->MouseDeltaY,
+                              &X, &Y);
+
+    SDL_RenderWindowToLogical(Renderer, 
+                              GameInput->MouseX, GameInput->MouseY, 
+                              &GameInput->MouseLogicalX, &GameInput->MouseLogicalY);
+
+    GameInput->MouseLogicalDeltaX = X - GameInput->MouseLogicalX;
+    GameInput->MouseLogicalDeltaY = Y - GameInput->MouseLogicalY;
 }
 
 platform_image

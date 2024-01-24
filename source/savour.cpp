@@ -7,15 +7,8 @@
 
 #include <ctime>
 
-struct rect
-{
-    u32 X;
-    u32 Y;
-    u32 Width;
-    u32 Height;
-};
-
-u32 AlphaBlendBgFg(vec3 Bg, vec3 Fg, f32 Alpha)
+u32
+AlphaBlendBgFg(vec3 Bg, vec3 Fg, f32 Alpha)
 {
     u8 R = ((u8) ((Bg.R * 255) * (1 - Alpha)) +
             (u8) ((Fg.R * 255) * (    Alpha)));
@@ -32,7 +25,8 @@ u32 AlphaBlendBgFg(vec3 Bg, vec3 Fg, f32 Alpha)
     return Result;
 }
 
-u32 InterpolatePixel(u32 A, u32 B, f32 Ratio)
+u32
+InterpolatePixel(u32 A, u32 B, f32 Ratio)
 {
     u32 RMask = 0xFF000000;
     u32 GMask = 0x00FF0000;
@@ -62,7 +56,8 @@ u32 InterpolatePixel(u32 A, u32 B, f32 Ratio)
     return Result;
 }
 
-void BlitAlpha(image Source, rect SourceRect, image Dest, rect DestRect, vec3 Bg, vec3 Fg, b32 Bilinear)
+void
+BlitAlpha(image Source, rect SourceRect, image Dest, rect DestRect, vec3 Bg, vec3 Fg, b32 Bilinear)
 {
     Assert(SourceRect.X >= 0);
     Assert(SourceRect.X < Source.Width);
@@ -70,24 +65,54 @@ void BlitAlpha(image Source, rect SourceRect, image Dest, rect DestRect, vec3 Bg
     Assert(SourceRect.Y >= 0);
     Assert(SourceRect.Y < Source.Height);
     Assert(SourceRect.Y + SourceRect.Height <= Source.Height);
-    Assert(DestRect.X >= 0);
-    Assert(DestRect.X < Dest.Width);
-    Assert(DestRect.X + DestRect.Width <= Dest.Width);
-    Assert(DestRect.Y >= 0);
-    Assert(DestRect.Y < Dest.Height);
-    Assert(DestRect.Y + DestRect.Height <= Dest.Height);
 
     u32 *SourcePixels = (u32 *) Source.Pixels;
     u32 *DestPixels = (u32 *) Dest.Pixels;
 
-    u32 DestRectMaxX = DestRect.X + DestRect.Width;
-    u32 DestRectMaxY = DestRect.Y + DestRect.Height;
-    for (u32 RowI = DestRect.Y;
+    i32 DestRectMinX = DestRect.X;
+    if (DestRectMinX > Dest.Width)
+    {
+        return;
+    }
+    else if (DestRectMinX < 0)
+    {
+        DestRectMinX = 0;
+    }
+    i32 DestRectMinY = DestRect.Y;
+    if (DestRectMinY > Dest.Height)
+    {
+        return;
+    }
+    else if (DestRectMinY < 0)
+    {
+        DestRectMinY = 0;
+    }
+
+    i32 DestRectMaxX = DestRect.X + DestRect.Width;
+    if (DestRectMaxX < 0)
+    {
+        return;
+    }
+    else if (DestRectMaxX > Dest.Width)
+    {
+        DestRectMaxX = Dest.Width;
+    }
+    i32 DestRectMaxY = DestRect.Y + DestRect.Height;
+    if (DestRectMaxY < 0)
+    {
+        return;
+    }
+    else if (DestRectMaxY > Dest.Height)
+    {
+        DestRectMaxY = Dest.Height;
+    }
+    
+    for (i32 RowI = DestRectMinY;
          RowI < DestRectMaxY;
          ++RowI)
     {
         f32 DestRectYRatio = (f32) (RowI - DestRect.Y) / (f32) (DestRect.Height);
-        for (u32 ColumnI = DestRect.X;
+        for (i32 ColumnI = DestRectMinX;
              ColumnI < DestRectMaxX;
              ++ColumnI)
         {
@@ -152,7 +177,8 @@ void BlitAlpha(image Source, rect SourceRect, image Dest, rect DestRect, vec3 Bg
     return;
 }
 
-void GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, platform_image *OffscreenBuffer, b32 *GameShouldQuit)
+void
+GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, platform_image *OffscreenBuffer, b32 *GameShouldQuit)
 {
     game_state *GameState = (game_state *) GameMemory->Storage;
 
@@ -163,76 +189,73 @@ void GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, platfor
 
         GameState->FontAtlas = GetImageFromPlatformImage(Platform_LoadBMP("resources/font.bmp"));
 
-        GameState->MapWidth = 32;
+        GameState->MapWidth = 64;
         GameState->MapHeight = 32;
         for (u32 MapGlyphI = 0;
-             MapGlyphI < 1024;
+             MapGlyphI < 2048;
              ++MapGlyphI)
         {
-            GameState->MapGlyphs[MapGlyphI] = (((rand() % 2) == 0) ? '#' : ',');
+            i32 X = MapGlyphI % GameState->MapWidth;
+            i32 Y = MapGlyphI / GameState->MapWidth;
+
+            if (X == 0 || X == (GameState->MapWidth - 1) ||
+                Y == 0 || Y == (GameState->MapHeight - 1))
+            {
+                GameState->MapGlyphs[MapGlyphI] = '#';
+            }
+            else
+            {
+                GameState->MapGlyphs[MapGlyphI] = (((rand() % 2) == 0) ? '`' : ',');
+            }
         }
+
+        GameState->CameraZoom = 1.0f;
         
         GameMemory->IsInitialized = true;
     }
+
+    if (Platform_KeyIsDown(GameInput, SDL_SCANCODE_ESCAPE))
+    {
+        *GameShouldQuit = true;
+    }
     
-    u32 ScreenGlyphWidth = 48;
-    u32 ScreenGlyphHeight = 72;
-    u32 AtlasGlyphWidth = 48;
-    u32 AtlasGlyphHeight = 72;
+    i32 ScreenGlyphWidth = 48;
+    i32 ScreenGlyphHeight = 72;
+    i32 AtlasGlyphWidth = 48;
+    i32 AtlasGlyphHeight = 72;
 
     rect SourceRect = {};
     SourceRect.X = 48;
     SourceRect.Y = 0;
-    SourceRect.Width = ScreenGlyphWidth;
-    SourceRect.Height = ScreenGlyphHeight;
+    SourceRect.Width = AtlasGlyphWidth;
+    SourceRect.Height = AtlasGlyphHeight;
     rect DestRect = {};
     DestRect.X = 0;
     DestRect.Y = 0;
-    DestRect.Width = AtlasGlyphWidth;
-    DestRect.Height = AtlasGlyphHeight;
+    DestRect.Width = (i32) (ScreenGlyphWidth * GameState->CameraZoom);
+    DestRect.Height = (i32) (ScreenGlyphHeight * GameState->CameraZoom);
 
     image ScreenImage = {};
     ScreenImage.Pixels = OffscreenBuffer->ImageData;
     ScreenImage.Width = OffscreenBuffer->Width;
     ScreenImage.Height = OffscreenBuffer->Height;
 
-    for (u32 MapGlyphI = 0;
-         MapGlyphI < 1024;
+    for (i32 MapGlyphI = 0;
+         MapGlyphI < 2048;
          ++MapGlyphI)
     {
-        DestRect.X = (MapGlyphI % GameState->MapWidth) * ScreenGlyphWidth;
-        DestRect.Y = (MapGlyphI / GameState->MapHeight) * ScreenGlyphHeight;
-
-        if (DestRect.X >= ScreenImage.Width)
-        {
-            continue;
-        }
-        else if (DestRect.X + DestRect.Width > ScreenImage.Width)
-        {
-            DestRect.Width = ScreenImage.Width - DestRect.X;
-        }
-        else
-        {
-            DestRect.Width = ScreenGlyphWidth;
-        }
-
-        if (DestRect.Y >= ScreenImage.Height)
-        {
-            continue;
-        }
-        else if (DestRect.Y + DestRect.Height > ScreenImage.Height)
-        {
-            DestRect.Height = ScreenImage.Height - DestRect.Y;
-        }
-        else
-        {
-            DestRect.Height = ScreenGlyphHeight;
-        }
+        DestRect.X = (i32) (((MapGlyphI % GameState->MapWidth) * ScreenGlyphWidth - (i32) GameState->CameraOffsetX) * GameState->CameraZoom);
+        DestRect.Y = (i32) (((MapGlyphI / GameState->MapWidth) * ScreenGlyphHeight - (i32) GameState->CameraOffsetY) * GameState->CameraZoom);
 
         if (GameState->MapGlyphs[MapGlyphI] == '#')
         {
             SourceRect.X = 144;
             SourceRect.Y = 144;
+        }
+        else if (GameState->MapGlyphs[MapGlyphI] == '`')
+        {
+            SourceRect.X = 0;
+            SourceRect.Y = 432;
         }
         else
         {
@@ -240,54 +263,45 @@ void GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, platfor
             SourceRect.Y = 144;
         }
 
+        if (MapGlyphI == 0 && Platform_KeyIsDown(GameInput, SDL_SCANCODE_B))
+        {
+            Breakpoint;
+        }
+
         BlitAlpha(GameState->FontAtlas, SourceRect, ScreenImage, DestRect, Vec3(1), Vec3(0), false);
     }
 
-    i32 MinX = -4;
-    i32 MinY = -4;
-    i32 MaxX = 4;
-    i32 MaxY = 4;
-
-    if (Platform_KeyJustPressed(GameInput, SDL_SCANCODE_L))
+    f32 PixelsPerSecond = 200.0f;
+    if (Platform_KeyIsDown(GameInput, SDL_SCANCODE_H))
     {
-        GameState->PlayerX++;
-        if (GameState->PlayerX > MaxX)
-        {
-            GameState->PlayerX = MinX;
-        }
+        GameState->CameraOffsetX -= PixelsPerSecond * GameInput->DeltaTime;
     }
-    if (Platform_KeyJustPressed(GameInput, SDL_SCANCODE_H))
+    if (Platform_KeyIsDown(GameInput, SDL_SCANCODE_L))
     {
-        GameState->PlayerX--;
-        if (GameState->PlayerX < MinX)
-        {
-            GameState->PlayerX = MaxX;
-        }
+        GameState->CameraOffsetX += PixelsPerSecond * GameInput->DeltaTime;
     }
-    if (Platform_KeyJustPressed(GameInput, SDL_SCANCODE_J))
+    if (Platform_KeyIsDown(GameInput, SDL_SCANCODE_K))
     {
-        GameState->PlayerY--;
-        if (GameState->PlayerY < MinY)
-        {
-            GameState->PlayerY = MaxY;
-        }
+        GameState->CameraOffsetY -= PixelsPerSecond * GameInput->DeltaTime;
     }
-    if (Platform_KeyJustPressed(GameInput, SDL_SCANCODE_K))
+    if (Platform_KeyIsDown(GameInput, SDL_SCANCODE_J))
     {
-        GameState->PlayerY++;
-        if (GameState->PlayerY > MaxY)
-        {
-            GameState->PlayerY = MinY;
-        }
+        GameState->CameraOffsetY += PixelsPerSecond * GameInput->DeltaTime;
     }
 
-    u32 MiddleRectX = 912;
-    u32 MiddleRectY = 504;
-    DestRect.X = MiddleRectX + GameState->PlayerX * 48;
-    DestRect.Y = MiddleRectY + -GameState->PlayerY * 72;
+    if (Platform_MouseButtonIsDown(GameInput, MouseButton_Middle))
+    {
+        GameState->CameraOffsetX -= GameInput->MouseLogicalDeltaX / GameState->CameraZoom;
+        GameState->CameraOffsetY -= GameInput->MouseLogicalDeltaY / GameState->CameraZoom;
+    }
 
-    SourceRect.X = 48;
-    SourceRect.Y = 0;
-    
-    BlitAlpha(GameState->FontAtlas, SourceRect, ScreenImage, DestRect, Vec3(1), Vec3(0), GameState->IsBilinear);
+    f32 ZoomPerSecond = 1.0f;
+    if (Platform_KeyIsDown(GameInput, SDL_SCANCODE_PAGEUP))
+    {
+        GameState->CameraZoom += ZoomPerSecond * GameInput->DeltaTime;
+    }
+    if (Platform_KeyIsDown(GameInput, SDL_SCANCODE_PAGEDOWN))
+    {
+        GameState->CameraZoom -= ZoomPerSecond * GameInput->DeltaTime;
+    }
 }

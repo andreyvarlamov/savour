@@ -7,10 +7,19 @@
 
 struct image
 {
-    u32 Width;
-    u32 Height;
+    i32 Width;
+    i32 Height;
     void *Pixels;
 };
+
+struct rect
+{
+    i32 X;
+    i32 Y;
+    i32 Width;
+    i32 Height;
+};
+
 
 inline image GetImageFromPlatformImage(platform_image PlatformImage)
 {
@@ -28,17 +37,16 @@ struct game_state
     image FontAtlas;
     b32 IsBilinear;
 
-    i32 PlayerX = 0;
-    i32 PlayerY = 0;
+    u32 MapGlyphs[2048];
+    i32 MapWidth;
+    i32 MapHeight;
 
-    u32 MapGlyphs[1024];
-    u32 MapWidth;
-    u32 MapHeight;
+    i32 PlayerX;
+    i32 PlayerY;
 
-    u32 CameraX;
-    u32 CameraY;
-    u32 CameraWidth;
-    u32 CameraHeight;
+    f32 CameraOffsetX;
+    f32 CameraOffsetY;
+    f32 CameraZoom;
 };
 
 #endif
