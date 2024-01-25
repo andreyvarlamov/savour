@@ -1110,4 +1110,104 @@ Mat4GetPerspecitveProjection(f32 FovY_Degrees, f32 AspectRatio, f32 Near, f32 Fa
     return Result;
 }
 
+// -------------------------------------------------------------------------------
+// VECTOR 2 INTEGER --------------------------------------------------------------
+// -------------------------------------------------------------------------------
+union vec2i
+{
+    struct
+    {
+        i32 X, Y;
+    };
+
+    i32 E[2];
+};
+
+inline vec2i
+Vec2I()
+{
+    vec2i Result = {};
+    return Result;
+}
+
+inline vec2i
+Vec2I(i32 X, i32 Y)
+{
+    vec2i Result = {};
+
+    Result.X = X;
+    Result.Y = Y;
+
+    return Result;
+}
+
+inline vec2i
+Vec2I(i32 Value)
+{
+    vec2i Result = Vec2I(Value, Value);
+    return Result;
+}
+
+// -------------------------------------------------------------------------------
+// VECTOR 3 INTEGER --------------------------------------------------------------
+// -------------------------------------------------------------------------------
+union vec3i
+{
+    struct
+    {
+        i32 X, Y, Z;
+    };
+
+    i32 E[3];
+};
+
+inline vec3i
+Vec3I()
+{
+    vec3i Result = {};
+    return Result;
+}
+
+inline vec3i
+Vec3I(i32 X, i32 Y, i32 Z)
+{
+    vec3i Result = {};
+
+    Result.X = X;
+    Result.Y = Y;
+    Result.Z = Z;
+
+    return Result;
+}
+
+inline vec3i
+Vec3I(i32 Value)
+{
+    vec3i Result = Vec3I(Value, Value, Value);
+    return Result;
+}
+
+inline vec3i
+Vec3I(vec2i V)
+{
+    vec3i Result = Vec3I(V.X, V.Y, 0);
+    return Result;
+}
+
+inline vec2i
+Vec2I(vec3i V)
+{
+    vec2i Result = Vec2I(V.X, V.Y);
+    return Result;
+}
+
+inline b32
+Vec3IAreEqual(vec3i A, vec3i B)
+{
+    b32 Result = (A.X == B.X &&
+                  A.Y == B.Y &&
+                  A.Z == B.Z);
+    return Result;
+}
+
 #endif

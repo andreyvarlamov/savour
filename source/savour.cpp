@@ -202,7 +202,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, platform_ima
     if (!GameMemory->IsInitialized)
     {
         // TODO: Temporary
-        srand((u32)time(NULL)); 
+        srand((u32)time(NULL));
 
         GameState->FontAtlas.Image = GetImageFromPlatformImage(Platform_LoadBMP("resources/font.bmp"));
         GameState->FontAtlas.AtlasWidth = 16;
@@ -212,8 +212,8 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, platform_ima
 
         GameState->MapWidth = 64;
         GameState->MapHeight = 32;
-        for (u32 MapGlyphI = 0;
-             MapGlyphI < 2048;
+        for (i32 MapGlyphI = 0;
+             MapGlyphI < GameState->MapWidth * GameState->MapHeight;
              ++MapGlyphI)
         {
             i32 X = MapGlyphI % GameState->MapWidth;
@@ -222,19 +222,43 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, platform_ima
             if (X == 0 || X == (GameState->MapWidth - 1) ||
                 Y == 0 || Y == (GameState->MapHeight - 1))
             {
-                GameState->MapGlyphs[MapGlyphI] = '#';
+                entity Entity = {};
+                Entity.Position = Vec3I(X, Y, 0);
+                Entity.Glyph = '#';
+                Entity.ForegroundColor = Vec3(1);
+                Entity.BackgroundColor = Vec3(0);
+                Entity.IsBlocking = true;
+                Entity.IsTransparent = false;
+                Entity.IsSupporting = false;
+                GameState->Entities[GameState->CurrentEntityIndex++] = Entity;
             }
             else
             {
-                GameState->MapGlyphs[MapGlyphI] = (((rand() % 2) == 0) ? 176 : 177);
+                i32 RandValue = rand() % 3;
+                if (RandValue != 0)
+                {
+                    entity Entity = {};
+                    Entity.Position = Vec3I(X, Y, 0);
+                    Entity.Glyph = ((RandValue ==  1) ? 176 : 177);
+                    Entity.ForegroundColor = Vec3(0);
+                    Entity.BackgroundColor = Vec3(0,1,0);
+                    Entity.IsBlocking = false;
+                    Entity.IsTransparent = true;
+                    Entity.IsSupporting = true;
+                    GameState->Entities[GameState->CurrentEntityIndex++] = Entity;
+                }
             }
+
         }
 
         GameState->CameraZoom = 1.0f;
         
-        GameMemory->IsInitialized = true;
 
+        GameState->PlayerX = 1;
+        GameState->PlayerY = 1;
         PlayerMoved = true;
+
+        GameMemory->IsInitialized = true;
     }
 
     if (Platform_KeyIsDown(GameInput, SDL_SCANCODE_ESCAPE))
@@ -256,26 +280,60 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, platform_ima
     ScreenImage.Width = OffscreenBuffer->Width;
     ScreenImage.Height = OffscreenBuffer->Height;
 
+    vec3i TestPlayerPosition = Vec3I(GameState->PlayerX, GameState->PlayerY, 0);
     if (Platform_KeyRepeat(GameInput, SDL_SCANCODE_H))
     {
-        GameState->PlayerX--;
+        TestPlayerPosition.X--;
         PlayerMoved = true;
     }
     if (Platform_KeyRepeat(GameInput, SDL_SCANCODE_L))
     {
-        GameState->PlayerX++;
+        TestPlayerPosition.X++;
         PlayerMoved = true;
     }
     if (Platform_KeyRepeat(GameInput, SDL_SCANCODE_K))
-    {
-        GameState->PlayerY--;
+    { 
+        TestPlayerPosition.Y--;
         PlayerMoved = true;
     }
     if (Platform_KeyRepeat(GameInput, SDL_SCANCODE_J))
     {
-        GameState->PlayerY++;
+        TestPlayerPosition.Y++;
         PlayerMoved = true;
     }
+
+    b32 FoundBlocking = false;
+    b32 FoundSupporting = false;
+    for (u32 EntityI = 0;
+         EntityI < GameState->CurrentEntityIndex;
+         ++EntityI)
+    {
+        entity *Entity = GameState->Entities + EntityI;
+
+        if (Vec3IAreEqual(Entity->Position, TestPlayerPosition))
+        {
+            if (Entity->IsSupporting)
+            {
+                FoundSupporting = true;
+            }
+            
+            if (Entity->IsBlocking)
+            {
+                FoundBlocking = true;
+                continue;
+            }
+        }
+    }
+
+    if (FoundBlocking || !FoundSupporting)
+    {
+        PlayerMoved = false;
+    }
+    else
+    {
+        GameState->PlayerX = TestPlayerPosition.X;
+        GameState->PlayerY = TestPlayerPosition.Y;
+   }
 
     if (PlayerMoved)
     {
@@ -288,24 +346,21 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, platform_ima
         GameState->CameraOffsetY = PlayerCenterPxY - ZoomedHalfHeight;
     }
 
-    for (i32 MapGlyphI = 0;
-         MapGlyphI < 2048;
-         ++MapGlyphI)
+    for (u32 EntityI = 0;
+         EntityI < GameState->CurrentEntityIndex;
+         ++EntityI)
     {
-        DestRect.X = (i32) (((MapGlyphI % GameState->MapWidth) * ScreenGlyphWidth - (i32) GameState->CameraOffsetX) * GameState->CameraZoom);
-        DestRect.Y = (i32) (((MapGlyphI / GameState->MapWidth) * ScreenGlyphHeight - (i32) GameState->CameraOffsetY) * GameState->CameraZoom);
+        entity *Entity = GameState->Entities + EntityI;
+        
+        DestRect.X = (i32) ((Entity->Position.X * ScreenGlyphWidth - (i32) GameState->CameraOffsetX) * GameState->CameraZoom);
+        DestRect.Y = (i32) ((Entity->Position.Y * ScreenGlyphHeight - (i32) GameState->CameraOffsetY) * GameState->CameraZoom);
 
-        if (MapGlyphI == 0 && Platform_KeyIsDown(GameInput, SDL_SCANCODE_B))
-        {
-            Breakpoint;
-        }
-
-        RenderGlyph(GameState->FontAtlas, GameState->MapGlyphs[MapGlyphI], ScreenImage, DestRect, Vec3(1), Vec3(0));
+        RenderGlyph(GameState->FontAtlas, Entity->Glyph, ScreenImage, DestRect, Entity->BackgroundColor, Entity->ForegroundColor);
     }
 
     DestRect.X = (i32) ((GameState->PlayerX * ScreenGlyphWidth - (i32) GameState->CameraOffsetX) * GameState->CameraZoom);
     DestRect.Y = (i32) ((GameState->PlayerY * ScreenGlyphHeight - (i32) GameState->CameraOffsetY) * GameState->CameraZoom);
-    RenderGlyph(GameState->FontAtlas, '@', ScreenImage, DestRect, Vec3(0,1,0), Vec3(0));
+    RenderGlyph(GameState->FontAtlas, '@', ScreenImage, DestRect, Vec3(0,0,1), Vec3(0));
 
     if (Platform_MouseButtonIsDown(GameInput, MouseButton_Middle))
     {
@@ -313,13 +368,27 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, platform_ima
         GameState->CameraOffsetY -= GameInput->MouseLogicalDeltaY / GameState->CameraZoom;
     }
 
-    f32 ZoomPerSecond = 1.0f;
+    f32 ZoomPerSecond = 5.0f;
+    b32 ZoomChanged = false;
     if (Platform_KeyIsDown(GameInput, SDL_SCANCODE_PAGEUP))
     {
         GameState->CameraZoom += ZoomPerSecond * GameInput->DeltaTime;
+        ZoomChanged = true;
     }
     if (Platform_KeyIsDown(GameInput, SDL_SCANCODE_PAGEDOWN))
     {
         GameState->CameraZoom -= ZoomPerSecond * GameInput->DeltaTime;
+        ZoomChanged = true;
+    }
+
+    if (ZoomChanged)
+    {
+        f32 PlayerCenterPxX = (f32) (GameState->PlayerX * ScreenGlyphWidth) + (ScreenGlyphWidth / 2.0f);
+        f32 PlayerCenterPxY = (f32) (GameState->PlayerY * ScreenGlyphHeight) + (ScreenGlyphHeight / 2.0f);
+
+        f32 ZoomedHalfWidth = ScreenImage.Width / GameState->CameraZoom /  2.0f;
+        f32 ZoomedHalfHeight = ScreenImage.Height / GameState->CameraZoom / 2.0f;
+        GameState->CameraOffsetX = PlayerCenterPxX - ZoomedHalfWidth;
+        GameState->CameraOffsetY = PlayerCenterPxY - ZoomedHalfHeight;
     }
 }

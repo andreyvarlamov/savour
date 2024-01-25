@@ -41,14 +41,30 @@ struct font_atlas
     i32 GlyphPxHeight;
 };
 
+struct entity
+{
+    u8 Glyph;
+    vec3 ForegroundColor;
+    vec3 BackgroundColor;
+    
+    vec3i Position;
+    
+    // TODO: Should be flags
+    b32 IsBlocking;
+    b32 IsSupporting;
+    b32 IsTransparent;
+};
+
 struct game_state
 {
     font_atlas FontAtlas;
     b32 IsBilinear;
 
-    u8 MapGlyphs[2048];
     i32 MapWidth;
     i32 MapHeight;
+
+    entity Entities[4096];
+    u32 CurrentEntityIndex;
 
     i32 PlayerX;
     i32 PlayerY;
