@@ -178,6 +178,21 @@ BlitAlpha(image Source, rect SourceRect, image Dest, rect DestRect, vec3 Bg, vec
 }
 
 void
+RenderGlyph(font_atlas FontAtlas, u8 Glyph, image ScreenImage, rect DestRect, vec3 ForegroundColor, vec3 BackgroundColor)
+{
+    i32 GlyphX = (i32) Glyph % FontAtlas.AtlasWidth;
+    i32 GlyphY = (i32) Glyph / FontAtlas.AtlasWidth;
+    
+    rect SourceRect = {};
+    SourceRect.X = GlyphX * FontAtlas.GlyphPxWidth;
+    SourceRect.Y = GlyphY * FontAtlas.GlyphPxHeight;
+    SourceRect.Width = FontAtlas.GlyphPxWidth;
+    SourceRect.Height = FontAtlas.GlyphPxHeight;
+    
+    BlitAlpha(FontAtlas.Image, SourceRect, ScreenImage, DestRect, ForegroundColor, BackgroundColor, false);
+}
+
+void
 GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, platform_image *OffscreenBuffer, b32 *GameShouldQuit)
 {
     game_state *GameState = (game_state *) GameMemory->Storage;
@@ -189,7 +204,11 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, platform_ima
         // TODO: Temporary
         srand((u32)time(NULL)); 
 
-        GameState->FontAtlas = GetImageFromPlatformImage(Platform_LoadBMP("resources/font.bmp"));
+        GameState->FontAtlas.Image = GetImageFromPlatformImage(Platform_LoadBMP("resources/font.bmp"));
+        GameState->FontAtlas.AtlasWidth = 16;
+        GameState->FontAtlas.AtlasHeight = 16;
+        GameState->FontAtlas.GlyphPxWidth = 48;
+        GameState->FontAtlas.GlyphPxHeight = 72;
 
         GameState->MapWidth = 64;
         GameState->MapHeight = 32;
@@ -207,7 +226,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, platform_ima
             }
             else
             {
-                GameState->MapGlyphs[MapGlyphI] = (((rand() % 2) == 0) ? '`' : ',');
+                GameState->MapGlyphs[MapGlyphI] = (((rand() % 2) == 0) ? 176 : 177);
             }
         }
 
@@ -225,14 +244,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, platform_ima
     
     i32 ScreenGlyphWidth = 48;
     i32 ScreenGlyphHeight = 72;
-    i32 AtlasGlyphWidth = 48;
-    i32 AtlasGlyphHeight = 72;
 
-    rect SourceRect = {};
-    SourceRect.X = 48;
-    SourceRect.Y = 0;
-    SourceRect.Width = AtlasGlyphWidth;
-    SourceRect.Height = AtlasGlyphHeight;
     rect DestRect = {};
     DestRect.X = 0;
     DestRect.Y = 0;
@@ -267,8 +279,13 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, platform_ima
 
     if (PlayerMoved)
     {
-        GameState->CameraOffsetX = (f32) (GameState->PlayerX * ScreenGlyphWidth) + (ScreenGlyphWidth / 2.0f) - (ScreenImage.Width / 2.0f);
-        GameState->CameraOffsetY = (f32) (GameState->PlayerY * ScreenGlyphHeight) + (ScreenGlyphHeight / 2.0f) - (ScreenImage.Height / 2.0f);
+        f32 PlayerCenterPxX = (f32) (GameState->PlayerX * ScreenGlyphWidth) + (ScreenGlyphWidth / 2.0f);
+        f32 PlayerCenterPxY = (f32) (GameState->PlayerY * ScreenGlyphHeight) + (ScreenGlyphHeight / 2.0f);
+
+        f32 ZoomedHalfWidth = ScreenImage.Width / GameState->CameraZoom /  2.0f;
+        f32 ZoomedHalfHeight = ScreenImage.Height / GameState->CameraZoom / 2.0f;
+        GameState->CameraOffsetX = PlayerCenterPxX - ZoomedHalfWidth;
+        GameState->CameraOffsetY = PlayerCenterPxY - ZoomedHalfHeight;
     }
 
     for (i32 MapGlyphI = 0;
@@ -278,35 +295,17 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, platform_ima
         DestRect.X = (i32) (((MapGlyphI % GameState->MapWidth) * ScreenGlyphWidth - (i32) GameState->CameraOffsetX) * GameState->CameraZoom);
         DestRect.Y = (i32) (((MapGlyphI / GameState->MapWidth) * ScreenGlyphHeight - (i32) GameState->CameraOffsetY) * GameState->CameraZoom);
 
-        if (GameState->MapGlyphs[MapGlyphI] == '#')
-        {
-            SourceRect.X = 144;
-            SourceRect.Y = 144;
-        }
-        else if (GameState->MapGlyphs[MapGlyphI] == '`')
-        {
-            SourceRect.X = 0;
-            SourceRect.Y = 432;
-        }
-        else
-        {
-            SourceRect.X = 576;
-            SourceRect.Y = 144;
-        }
-
         if (MapGlyphI == 0 && Platform_KeyIsDown(GameInput, SDL_SCANCODE_B))
         {
             Breakpoint;
         }
 
-        BlitAlpha(GameState->FontAtlas, SourceRect, ScreenImage, DestRect, Vec3(1), Vec3(0), false);
+        RenderGlyph(GameState->FontAtlas, GameState->MapGlyphs[MapGlyphI], ScreenImage, DestRect, Vec3(1), Vec3(0));
     }
 
     DestRect.X = (i32) ((GameState->PlayerX * ScreenGlyphWidth - (i32) GameState->CameraOffsetX) * GameState->CameraZoom);
     DestRect.Y = (i32) ((GameState->PlayerY * ScreenGlyphHeight - (i32) GameState->CameraOffsetY) * GameState->CameraZoom);
-    SourceRect.X = 0;
-    SourceRect.Y = 288;
-    BlitAlpha(GameState->FontAtlas, SourceRect, ScreenImage, DestRect, Vec3(0,1,0), Vec3(0), false);
+    RenderGlyph(GameState->FontAtlas, '@', ScreenImage, DestRect, Vec3(0,1,0), Vec3(0));
 
     if (Platform_MouseButtonIsDown(GameInput, MouseButton_Middle))
     {

@@ -46,7 +46,9 @@ int main(int argc, char **argv)
     Assert(OffscreenTexture);
 
     game_input *GameInput = (game_input *) calloc(1, sizeof(game_input));
-    GameInput->KeyRepeatPeriod_ = 0.09f; // TODO: Maybe should be set and kept elsewhere
+     // TODO: Maybe these 2 should be set and stored elsewhere
+    GameInput->KeyRepeatDelay_ = 0.2f;
+    GameInput->KeyRepeatPeriod_ = 0.09f;
     game_memory GameMemory = {};
     GameMemory.StorageSize = Megabytes(64);
     GameMemory.Storage = calloc(1, GameMemory.StorageSize);

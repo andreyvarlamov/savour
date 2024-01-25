@@ -32,12 +32,21 @@ inline image GetImageFromPlatformImage(platform_image PlatformImage)
     return Result;
 }
 
+struct font_atlas
+{
+    image Image;
+    i32 AtlasWidth;
+    i32 AtlasHeight;
+    i32 GlyphPxWidth;
+    i32 GlyphPxHeight;
+};
+
 struct game_state
 {
-    image FontAtlas;
+    font_atlas FontAtlas;
     b32 IsBilinear;
 
-    u32 MapGlyphs[2048];
+    u8 MapGlyphs[2048];
     i32 MapWidth;
     i32 MapHeight;
 

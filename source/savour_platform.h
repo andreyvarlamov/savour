@@ -18,6 +18,7 @@ struct game_input
 
     f32 KeyRepeatAccums_[SDL_NUM_SCANCODES];
     f32 KeyRepeatPeriod_;
+    f32 KeyRepeatDelay_;
     
     u8 CurrentMouseButtonStates_[MouseButton_Count];
     u8 PreviousMouseButtonStates_[MouseButton_Count];
@@ -69,7 +70,6 @@ Platform_KeyJustPressed(game_input *GameInput, u32 KeyScancode)
     b32 Result = (GameInput->CurrentKeyStates_[KeyScancode] && !GameInput->PreviousKeyStates_[KeyScancode]);
     return Result;
 }
-
 inline b32
 Platform_KeyJustReleased(game_input *GameInput, u32 KeyScancode)
 {
@@ -87,10 +87,10 @@ Platform_KeyRepeat(game_input *GameInput, u32 KeyScancode)
         if (GameInput->PreviousKeyStates_[KeyScancode])
         {
             // NOTE: Key was already pressed, run key repeat
-            GameInput->KeyRepeatAccums_[KeyScancode] += GameInput->DeltaTime;
-            if (GameInput->KeyRepeatAccums_[KeyScancode] >= GameInput->KeyRepeatPeriod_)
+            GameInput->KeyRepeatAccums_[KeyScancode] -= GameInput->DeltaTime;
+            if (GameInput->KeyRepeatAccums_[KeyScancode] <= 0.0f)
             {
-                GameInput->KeyRepeatAccums_[KeyScancode] = 0.0f;
+                GameInput->KeyRepeatAccums_[KeyScancode] = GameInput->KeyRepeatPeriod_;
                 return true;
             }
             else
@@ -101,7 +101,7 @@ Platform_KeyRepeat(game_input *GameInput, u32 KeyScancode)
         else
         {
             // NOTE: Key newly pressed, reset key repeat accumulator, and return true
-            GameInput->KeyRepeatAccums_[KeyScancode] =  0.0f;
+            GameInput->KeyRepeatAccums_[KeyScancode] = GameInput->KeyRepeatDelay_;
             return true;
         }
     }
