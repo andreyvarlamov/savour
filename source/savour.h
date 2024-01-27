@@ -44,16 +44,26 @@ struct font_atlas
 struct entity
 {
     u8 Glyph;
+    // TODO: Store the 2 colors as 6 bytes
     vec3 ForegroundColor;
     vec3 BackgroundColor;
     
     vec3i Position;
     
-    // TODO: Should be flags
+    // TODO: Flags
     b32 IsBlocking;
-    b32 IsSupporting;
-    b32 IsTransparent;
+    b32 IsOpaque;
 };
+
+struct entity_node
+{
+    entity E;
+    b32 IsPopulated;
+    // TODO: Doubly linked?
+    entity_node *Next;
+};
+
+#define MapTableEntryCount 16384
 
 struct game_state
 {
@@ -63,15 +73,17 @@ struct game_state
     i32 MapWidth;
     i32 MapHeight;
 
-    entity Entities[4096];
-    u32 CurrentEntityIndex;
+    // TODO: Whether a floor is an entity is still pending
+    // For now the first entity node in each map table entry is the floor
+    entity_node MapTable[MapTableEntryCount];
+    entity_node *EntityNodeFreeList;
 
-    i32 PlayerX;
-    i32 PlayerY;
+    entity_node *PlayerEntityNode;
 
     f32 CameraOffsetX;
     f32 CameraOffsetY;
     f32 CameraZoom;
+    b32 CameraInitialZoom;
 };
 
 #endif

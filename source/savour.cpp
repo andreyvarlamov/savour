@@ -192,13 +192,95 @@ RenderGlyph(font_atlas FontAtlas, u8 Glyph, image ScreenImage, rect DestRect, ve
     BlitAlpha(FontAtlas.Image, SourceRect, ScreenImage, DestRect, ForegroundColor, BackgroundColor, false);
 }
 
+u32
+GetMapIndex(vec3i Position, i32 MapWidth)
+{
+    u32 Result = Position.X + MapWidth * Position.Y;
+    return Result;
+}
+
+entity_node *
+GetMapTopEntityNodeInPosition(entity_node *MapTable, i32 MapWidth, vec3i Position)
+{
+    // NOTE: Return the top *populated* node
+    
+    entity_node *Result = MapTable + GetMapIndex(Position, MapWidth);
+    
+    Assert(Result->IsPopulated);
+    
+    while (Result->Next)
+    {
+        Result = Result->Next;
+    }
+    
+    return Result;
+}
+
+entity_node *
+GetFreeEntityNodeInMapTable(game_state *GameState)
+{
+    entity_node *Result = 0;
+    
+    if (GameState->EntityNodeFreeList)
+    {
+        Result = GameState->EntityNodeFreeList;
+
+        GameState->EntityNodeFreeList = GameState->EntityNodeFreeList->Next;
+
+        Result->Next = 0;
+    }
+    else
+    {
+        for (u32 EntityNodeI = GameState->MapWidth * GameState->MapHeight;
+             EntityNodeI < MapTableEntryCount;
+             ++EntityNodeI)
+        {
+            entity_node *EntityNode = GameState->MapTable + EntityNodeI;
+
+            if (!EntityNode->IsPopulated)
+            {
+                Result = EntityNode;
+                break;
+            }
+        }
+    }
+
+    Assert(Result);
+
+    return Result;
+}
+
+entity_node *
+GetEntityParentNode(entity_node *MapTable, i32 MapWidth, entity_node *ChildEntityNode)
+{
+    entity_node *Result = MapTable + GetMapIndex(ChildEntityNode->E.Position, MapWidth);
+
+    if (Result == ChildEntityNode)
+    {
+        return Result;
+    }
+
+    while (Result->Next)
+    {
+        if (Result->Next == ChildEntityNode)
+        {
+            return Result;
+        }
+        
+        Result = Result->Next;
+    }
+
+    InvalidCodePath;
+    
+    return 0;
+}
+
 void
 GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, platform_image *OffscreenBuffer, b32 *GameShouldQuit)
 {
     game_state *GameState = (game_state *) GameMemory->Storage;
 
-    b32 PlayerMoved = false;
-    
+    b32 InitialPlayerPositionReset = false;
     if (!GameMemory->IsInitialized)
     {
         // TODO: Temporary
@@ -211,52 +293,63 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, platform_ima
         GameState->FontAtlas.GlyphPxHeight = 72;
 
         GameState->MapWidth = 64;
-        GameState->MapHeight = 32;
-        for (i32 MapGlyphI = 0;
-             MapGlyphI < GameState->MapWidth * GameState->MapHeight;
-             ++MapGlyphI)
+        GameState->MapHeight = 64;
+        for (i32 MapI = 0;
+             MapI < GameState->MapWidth * GameState->MapHeight;
+             ++MapI)
         {
-            i32 X = MapGlyphI % GameState->MapWidth;
-            i32 Y = MapGlyphI / GameState->MapWidth;
+            entity_node *HeadEntityNode = GameState->MapTable + MapI;
+            
+            i32 X = MapI % GameState->MapWidth;
+            i32 Y = MapI / GameState->MapWidth;
+            vec3i Position = Vec3I(X, Y, 0);
+
+            HeadEntityNode->E.Glyph = (((rand() % 2) ==  0) ? 176 : 177);
+            HeadEntityNode->E.ForegroundColor = Vec3(0);
+            HeadEntityNode->E.BackgroundColor = Vec3(0,1,0);
+            HeadEntityNode->E.Position = Position;
+            HeadEntityNode->E.IsBlocking = false;
+            HeadEntityNode->E.IsOpaque = false;
+            HeadEntityNode->IsPopulated = true;
 
             if (X == 0 || X == (GameState->MapWidth - 1) ||
                 Y == 0 || Y == (GameState->MapHeight - 1))
             {
-                entity Entity = {};
-                Entity.Position = Vec3I(X, Y, 0);
-                Entity.Glyph = '#';
-                Entity.ForegroundColor = Vec3(1);
-                Entity.BackgroundColor = Vec3(0);
-                Entity.IsBlocking = true;
-                Entity.IsTransparent = false;
-                Entity.IsSupporting = false;
-                GameState->Entities[GameState->CurrentEntityIndex++] = Entity;
-            }
-            else
-            {
-                i32 RandValue = rand() % 3;
-                if (RandValue != 0)
-                {
-                    entity Entity = {};
-                    Entity.Position = Vec3I(X, Y, 0);
-                    Entity.Glyph = ((RandValue ==  1) ? 176 : 177);
-                    Entity.ForegroundColor = Vec3(0);
-                    Entity.BackgroundColor = Vec3(0,1,0);
-                    Entity.IsBlocking = false;
-                    Entity.IsTransparent = true;
-                    Entity.IsSupporting = true;
-                    GameState->Entities[GameState->CurrentEntityIndex++] = Entity;
-                }
-            }
+                entity_node *FreeEntityNode = GetFreeEntityNodeInMapTable(GameState);
 
+                FreeEntityNode->E.Position = Position;
+                FreeEntityNode->E.Glyph = '#';
+                FreeEntityNode->E.ForegroundColor = Vec3(1);
+                FreeEntityNode->E.BackgroundColor = Vec3(0);
+                FreeEntityNode->E.IsBlocking = true;
+                FreeEntityNode->E.IsOpaque = true;
+                FreeEntityNode->IsPopulated = true;
+
+                HeadEntityNode->Next = FreeEntityNode;
+            }
         }
 
         GameState->CameraZoom = 1.0f;
-        
+        GameState->CameraInitialZoom = false;
 
-        GameState->PlayerX = 1;
-        GameState->PlayerY = 1;
-        PlayerMoved = true;
+        // NOTE: Create player entity
+        {
+            vec3i PlayerPosition = Vec3I(1, 1, 0);
+            entity_node *MapTopEntityNodeInPosition = GetMapTopEntityNodeInPosition(GameState->MapTable, GameState->MapWidth, PlayerPosition);
+
+            GameState->PlayerEntityNode = GetFreeEntityNodeInMapTable(GameState);
+            GameState->PlayerEntityNode->E.Position = PlayerPosition;
+            GameState->PlayerEntityNode->E.Glyph = '@';
+            GameState->PlayerEntityNode->E.ForegroundColor = Vec3(0);
+            GameState->PlayerEntityNode->E.BackgroundColor = Vec3(0,0,1);
+            GameState->PlayerEntityNode->E.IsBlocking = true;
+            GameState->PlayerEntityNode->E.IsOpaque = false;
+            GameState->PlayerEntityNode->IsPopulated = true;
+
+            MapTopEntityNodeInPosition->Next = GameState->PlayerEntityNode;
+
+            InitialPlayerPositionReset = true;
+        }
 
         GameMemory->IsInitialized = true;
     }
@@ -280,65 +373,74 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, platform_ima
     ScreenImage.Width = OffscreenBuffer->Width;
     ScreenImage.Height = OffscreenBuffer->Height;
 
-    vec3i TestPlayerPosition = Vec3I(GameState->PlayerX, GameState->PlayerY, 0);
+    b32 PlayerMoved = false;
+    vec3i NewPlayerPosition = GameState->PlayerEntityNode->E.Position; // Block copy
     if (Platform_KeyRepeat(GameInput, SDL_SCANCODE_H))
     {
-        TestPlayerPosition.X--;
+        NewPlayerPosition.X--;
         PlayerMoved = true;
     }
     if (Platform_KeyRepeat(GameInput, SDL_SCANCODE_L))
     {
-        TestPlayerPosition.X++;
+        NewPlayerPosition.X++;
         PlayerMoved = true;
     }
     if (Platform_KeyRepeat(GameInput, SDL_SCANCODE_K))
     { 
-        TestPlayerPosition.Y--;
+        NewPlayerPosition.Y--;
         PlayerMoved = true;
     }
     if (Platform_KeyRepeat(GameInput, SDL_SCANCODE_J))
     {
-        TestPlayerPosition.Y++;
+        NewPlayerPosition.Y++;
         PlayerMoved = true;
     }
 
-    b32 FoundBlocking = false;
-    b32 FoundSupporting = false;
-    for (u32 EntityI = 0;
-         EntityI < GameState->CurrentEntityIndex;
-         ++EntityI)
+    // NOTE: Test collisions
+    if (PlayerMoved)
     {
-        entity *Entity = GameState->Entities + EntityI;
+        entity_node *TestEntityNode = GameState->MapTable + GetMapIndex(NewPlayerPosition, GameState->MapWidth);
 
-        if (Vec3IAreEqual(Entity->Position, TestPlayerPosition))
+        if (TestEntityNode->IsPopulated)
         {
-            if (Entity->IsSupporting)
+            b32 FoundBlocking = false;
+            entity_node *CurrentEntityNode = TestEntityNode;
+            while(CurrentEntityNode)
             {
-                FoundSupporting = true;
+                if (CurrentEntityNode->E.IsBlocking)
+                {
+                    PlayerMoved = false;
+                    break;
+                }
+
+                CurrentEntityNode = CurrentEntityNode->Next;
             }
-            
-            if (Entity->IsBlocking)
-            {
-                FoundBlocking = true;
-                continue;
-            }
+        }
+        else
+        {
+            PlayerMoved = false;
         }
     }
 
-    if (FoundBlocking || !FoundSupporting)
+    b32 RecalculateZoom = false;
+    
+    // NOTE: Move player entity, update camera offset
+    if (PlayerMoved || InitialPlayerPositionReset)
     {
-        PlayerMoved = false;
-    }
-    else
-    {
-        GameState->PlayerX = TestPlayerPosition.X;
-        GameState->PlayerY = TestPlayerPosition.Y;
-   }
+        entity_node *OldParent = GetEntityParentNode(GameState->MapTable, GameState->MapWidth, GameState->PlayerEntityNode);
+        OldParent->Next = OldParent->Next->Next;
 
-    if (PlayerMoved)
-    {
-        f32 PlayerCenterPxX = (f32) (GameState->PlayerX * ScreenGlyphWidth) + (ScreenGlyphWidth / 2.0f);
-        f32 PlayerCenterPxY = (f32) (GameState->PlayerY * ScreenGlyphHeight) + (ScreenGlyphHeight / 2.0f);
+        entity_node *MapTopNodeInPosition = GetMapTopEntityNodeInPosition(GameState->MapTable, GameState->MapWidth, NewPlayerPosition);
+        MapTopNodeInPosition->Next = GameState->PlayerEntityNode;
+        GameState->PlayerEntityNode->Next = 0;
+        
+        GameState->PlayerEntityNode->E.Position.X = NewPlayerPosition.X;
+        GameState->PlayerEntityNode->E.Position.Y = NewPlayerPosition.Y;
+
+        RecalculateZoom = true;
+        
+        f32 PlayerCenterPxX = (f32) (GameState->PlayerEntityNode->E.Position.X * ScreenGlyphWidth) + (ScreenGlyphWidth / 2.0f);
+        f32 PlayerCenterPxY = (f32) (GameState->PlayerEntityNode->E.Position.Y * ScreenGlyphHeight) + (ScreenGlyphHeight / 2.0f);
 
         f32 ZoomedHalfWidth = ScreenImage.Width / GameState->CameraZoom /  2.0f;
         f32 ZoomedHalfHeight = ScreenImage.Height / GameState->CameraZoom / 2.0f;
@@ -346,21 +448,33 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, platform_ima
         GameState->CameraOffsetY = PlayerCenterPxY - ZoomedHalfHeight;
     }
 
-    for (u32 EntityI = 0;
-         EntityI < GameState->CurrentEntityIndex;
-         ++EntityI)
+    // TODO: Maybe cull unseen entities on the level of MapI
+    for (i32 MapI = 0;
+         MapI < GameState->MapWidth * GameState->MapHeight;
+         ++MapI)
     {
-        entity *Entity = GameState->Entities + EntityI;
-        
-        DestRect.X = (i32) ((Entity->Position.X * ScreenGlyphWidth - (i32) GameState->CameraOffsetX) * GameState->CameraZoom);
-        DestRect.Y = (i32) ((Entity->Position.Y * ScreenGlyphHeight - (i32) GameState->CameraOffsetY) * GameState->CameraZoom);
+        entity_node *VisibleEntityNode = GameState->MapTable + MapI;
+        if (VisibleEntityNode->IsPopulated)
+        {
+            while (VisibleEntityNode->Next)
+            {
+                VisibleEntityNode = VisibleEntityNode->Next;
+            }
 
-        RenderGlyph(GameState->FontAtlas, Entity->Glyph, ScreenImage, DestRect, Entity->BackgroundColor, Entity->ForegroundColor);
+            entity *Entity = &VisibleEntityNode->E;
+        
+            DestRect.X = (i32) ((Entity->Position.X * ScreenGlyphWidth - (i32) GameState->CameraOffsetX) * GameState->CameraZoom);
+            DestRect.Y = (i32) ((Entity->Position.Y * ScreenGlyphHeight - (i32) GameState->CameraOffsetY) * GameState->CameraZoom);
+
+            RenderGlyph(GameState->FontAtlas, Entity->Glyph, ScreenImage, DestRect, Entity->BackgroundColor, Entity->ForegroundColor);
+        }
     }
 
-    DestRect.X = (i32) ((GameState->PlayerX * ScreenGlyphWidth - (i32) GameState->CameraOffsetX) * GameState->CameraZoom);
-    DestRect.Y = (i32) ((GameState->PlayerY * ScreenGlyphHeight - (i32) GameState->CameraOffsetY) * GameState->CameraZoom);
+    #if 0
+    DestRect.X = (i32) ((GameState->PlayerEntityNode->E.Position.X * ScreenGlyphWidth - (i32) GameState->CameraOffsetX) * GameState->CameraZoom);
+    DestRect.Y = (i32) ((GameState->PlayerEntityNode->E.Position.Y * ScreenGlyphHeight - (i32) GameState->CameraOffsetY) * GameState->CameraZoom);
     RenderGlyph(GameState->FontAtlas, '@', ScreenImage, DestRect, Vec3(0,0,1), Vec3(0));
+    #endif
 
     if (Platform_MouseButtonIsDown(GameInput, MouseButton_Middle))
     {
@@ -374,17 +488,29 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, platform_ima
     {
         GameState->CameraZoom += ZoomPerSecond * GameInput->DeltaTime;
         ZoomChanged = true;
+        GameState->CameraInitialZoom = false;
     }
     if (Platform_KeyIsDown(GameInput, SDL_SCANCODE_PAGEDOWN))
     {
         GameState->CameraZoom -= ZoomPerSecond * GameInput->DeltaTime;
         ZoomChanged = true;
+        GameState->CameraInitialZoom = false;
     }
 
+    if (PlayerMoved && GameState->CameraInitialZoom)
+    {
+        GameState->CameraZoom -= 1.0f;
+        if (GameState->CameraZoom == 1.0f)
+        {
+            GameState->CameraInitialZoom = false;
+        }
+        ZoomChanged = true;
+    }
+        
     if (ZoomChanged)
     {
-        f32 PlayerCenterPxX = (f32) (GameState->PlayerX * ScreenGlyphWidth) + (ScreenGlyphWidth / 2.0f);
-        f32 PlayerCenterPxY = (f32) (GameState->PlayerY * ScreenGlyphHeight) + (ScreenGlyphHeight / 2.0f);
+        f32 PlayerCenterPxX = (f32) (GameState->PlayerEntityNode->E.Position.X * ScreenGlyphWidth) + (ScreenGlyphWidth / 2.0f);
+        f32 PlayerCenterPxY = (f32) (GameState->PlayerEntityNode->E.Position.Y * ScreenGlyphHeight) + (ScreenGlyphHeight / 2.0f);
 
         f32 ZoomedHalfWidth = ScreenImage.Width / GameState->CameraZoom /  2.0f;
         f32 ZoomedHalfHeight = ScreenImage.Height / GameState->CameraZoom / 2.0f;
