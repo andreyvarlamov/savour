@@ -56,6 +56,7 @@ void GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, platfor
 platform_image Platform_LoadBMP(const char *Path);
 platform_image Platform_LoadImage(const char *Path);
 void Platform_FreeImage(platform_image *PlatformImage);
+void Platform_SaveRGBA_BMP(platform_image *PlatformImage, const char *Name, b32 Timestamp = true);
 
 inline b32
 Platform_KeyIsDown(game_input *GameInput, u32 KeyScancode)

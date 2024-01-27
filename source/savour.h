@@ -63,7 +63,7 @@ struct entity_node
     entity_node *Next;
 };
 
-#define MapTableEntryCount 16384
+#define MapTableEntryCount 65536 //16384
 
 struct game_state
 {

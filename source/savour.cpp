@@ -286,7 +286,6 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, platform_ima
     {
         // TODO: Temporary
         srand((u32)time(NULL));
-        SeedRandom(8888);
 
         GameState->FontAtlas.Image = GetImageFromPlatformImage(Platform_LoadBMP("resources/font.bmp"));
         GameState->FontAtlas.AtlasWidth = 16;
@@ -294,8 +293,8 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, platform_ima
         GameState->FontAtlas.GlyphPxWidth = 48;
         GameState->FontAtlas.GlyphPxHeight = 72;
 
-        GameState->MapWidth = 64;
-        GameState->MapHeight = 64;
+        GameState->MapWidth = 128;
+        GameState->MapHeight = 128;
         for (i32 MapI = 0;
              MapI < GameState->MapWidth * GameState->MapHeight;
              ++MapI)
@@ -306,29 +305,59 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, platform_ima
             i32 Y = MapI / GameState->MapWidth;
             vec3i Position = Vec3I(X, Y, 0);
 
-            HeadEntityNode->E.Glyph = (((rand() % 2) ==  0) ? 176 : 177);
-            HeadEntityNode->E.ForegroundColor = Vec3(0);
-            HeadEntityNode->E.BackgroundColor = Vec3(0,1,0);
-            HeadEntityNode->E.Position = Position;
-            HeadEntityNode->E.IsBlocking = false;
-            HeadEntityNode->E.IsOpaque = false;
-            HeadEntityNode->IsPopulated = true;
+            f32 Intensity = PerlinSampleOctaves(X / 32.0f, Y / 32.0f, 1.8f, 0.5f, 6, 101);
+            Intensity = PerlinNormalize(Intensity);
 
-            if (X == 0 || X == (GameState->MapWidth - 1) ||
-                Y == 0 || Y == (GameState->MapHeight - 1))
+            if (Intensity <= 0.4f)
             {
-                entity_node *FreeEntityNode = GetFreeEntityNodeInMapTable(GameState);
-
-                FreeEntityNode->E.Position = Position;
-                FreeEntityNode->E.Glyph = '#';
-                FreeEntityNode->E.ForegroundColor = Vec3(1);
-                FreeEntityNode->E.BackgroundColor = Vec3(0);
-                FreeEntityNode->E.IsBlocking = true;
-                FreeEntityNode->E.IsOpaque = true;
-                FreeEntityNode->IsPopulated = true;
-
-                HeadEntityNode->Next = FreeEntityNode;
+                // NOTE: Water
+                HeadEntityNode->E.Glyph = (((rand() % 2) ==  0) ? 247 : 126);
+                HeadEntityNode->E.ForegroundColor = Vec3(0.3f, 0.3f, 0.8f);
+                HeadEntityNode->E.BackgroundColor = Vec3(0.2f, 0.2f, 0.6f);
+                HeadEntityNode->E.Position = Position;
+                HeadEntityNode->E.IsBlocking = false;
+                HeadEntityNode->E.IsOpaque = false;
+                HeadEntityNode->IsPopulated = true;
             }
+            else if (Intensity >= 0.6f)
+            {
+                // NOTE: Mountain
+                HeadEntityNode->E.Glyph = 219;
+                HeadEntityNode->E.ForegroundColor = Vec3(0.6f);
+                HeadEntityNode->E.BackgroundColor = Vec3(0);
+                HeadEntityNode->E.Position = Position;
+                HeadEntityNode->E.IsBlocking = true;
+                HeadEntityNode->E.IsOpaque = true;
+                HeadEntityNode->IsPopulated = true;
+            }
+            else
+            {
+                // NOTE: Grass
+                HeadEntityNode->E.Glyph = (((rand() % 2) ==  0) ? 176 : 177);
+                HeadEntityNode->E.ForegroundColor = Vec3(0);
+                HeadEntityNode->E.BackgroundColor = Vec3(0.3f, 0.6f, 0.4f);
+                HeadEntityNode->E.Position = Position;
+                HeadEntityNode->E.IsBlocking = false;
+                HeadEntityNode->E.IsOpaque = false;
+                HeadEntityNode->IsPopulated = true;
+            }
+
+
+            // if (X == 0 || X == (GameState->MapWidth - 1) ||
+            //     Y == 0 || Y == (GameState->MapHeight - 1))
+            // {
+            //     entity_node *FreeEntityNode = GetFreeEntityNodeInMapTable(GameState);
+
+            //     FreeEntityNode->E.Position = Position;
+            //     FreeEntityNode->E.Glyph = '#';
+            //     FreeEntityNode->E.ForegroundColor = Vec3(1);
+            //     FreeEntityNode->E.BackgroundColor = Vec3(0);
+            //     FreeEntityNode->E.IsBlocking = true;
+            //     FreeEntityNode->E.IsOpaque = true;
+            //     FreeEntityNode->IsPopulated = true;
+
+            //     HeadEntityNode->Next = FreeEntityNode;
+            // }
         }
 
         GameState->CameraZoom = 1.0f;

@@ -3,7 +3,7 @@
 
 #include "and_common.h"
 
-#include <cmath> // ldexp
+#include <cmath> // ldexp, fabs
 
 // NOTE: pcg-random.org
 
@@ -113,6 +113,61 @@ GetRandomF3201()
 // NOTE: Perlin noise
 //
 
+#define STB_PERLIN_IMPLEMENTATION
+#include <stb/stb_perlin.h>
+
+inline f32
+PerlinSample(f32 X, f32 Y, f32 Z, i32 Seed)
+{
+    f32 Result = stb_perlin_noise3_seed(X, Y, Z, 0, 0, 0, Seed);
+    local_persist b32 PrintedOne = false;
+    if (Result < 0.0f && !PrintedOne)
+    {
+        printf("%f\n", Result);
+        PrintedOne = true;
+    }
+    return Result;
+}
+
+inline f32
+PerlinSampleOctaves(f32 X, f32 Y, f32 Lacunarity, f32 Gain, u32 Octaves, i32 Seed)
+{
+    f32 Result = 0.0f;
+    f32 Amplitude = 1.0f;
+    f32 Frequency = 1.0f;
+    
+    for (u32 Octave = 0;
+         Octave < Octaves;
+         ++Octave)
+    {
+        Result += PerlinSample(X * Frequency, Y * Frequency, (f32) Octave, Seed) * Amplitude;
+        Frequency *= Lacunarity;
+        Amplitude *= Gain;
+    }
+
+    return Result;
+}
+
+inline f32
+PerlinNormalize(f32 Intensity)
+{
+    if (Intensity > 1.0f)
+    {
+        Intensity = 1.0f;
+    }
+    else if (Intensity < -1.0f)
+    {
+        Intensity = -1.0f;
+    }
+
+    Intensity *= 0.5f;
+    Intensity += 0.5f;
+    
+    return Intensity;
+}
+
+#if 0
+// Nevermind lol
 #define PermutationCount 256
 
 struct perlin_state
@@ -127,14 +182,19 @@ SeedPerlin(perlin_state *PerlinState, u64 Seed)
 {
     PerlinState->Seed = Seed;
     
+
     SeedRandom(&PerlinState->RandomState, PerlinState->Seed);
     
     for (u32 PermutationI = 0;
          PermutationI < PermutationCount;
          ++PermutationI)
     {
-        PerlinState->Permutations[PermutationI] = (u8) GetBoundedRandomU32(&PerlinState->RandomState, PermutationCount);
+        u8 Permutation = (u8) GetBoundedRandomU32(&PerlinState->RandomState, PermutationCount);
+        PerlinState->Permutations[PermutationI] = Permutation;
+        printf("%d\n", Permutation);
     }
+
+    Noop;
 }
 
 inline vec2
@@ -190,5 +250,6 @@ PerlinSample(perlin_state *PerlinState, f32 X, f32 Y)
     f32 Result = _PerlinInterpolate(InterpolatedX0, InterpolatedX1, sY);
     return Result;
 }
+#endif
 
 #endif
