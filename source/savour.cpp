@@ -1,6 +1,7 @@
 #include "and_common.h"
 #include "and_math.h"
 #include "and_linmath.h"
+#include "and_random.h"
 
 #include "savour_platform.h"
 #include "savour.h"
@@ -285,6 +286,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, platform_ima
     {
         // TODO: Temporary
         srand((u32)time(NULL));
+        SeedRandom(8888);
 
         GameState->FontAtlas.Image = GetImageFromPlatformImage(Platform_LoadBMP("resources/font.bmp"));
         GameState->FontAtlas.AtlasWidth = 16;

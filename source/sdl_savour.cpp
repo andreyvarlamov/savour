@@ -6,6 +6,7 @@
 #include "and_common.h"
 #include "and_math.h"
 #include "and_linmath.h"
+#include "and_random.h"
 
 #include "savour_platform.h"
 
@@ -58,6 +59,48 @@ int main(int argc, char **argv)
     u64 LastCounter = SDL_GetPerformanceCounter();
     f64 PrevFrameDeltaTimeSec = 0.0f;
     f64 FPS = 0.0f;
+
+    u32 *TestPerlinPixels = (u32 *) calloc(1, 1024 * 1024 * sizeof(u32));
+
+    perlin_state *PerlinState = (perlin_state *) calloc(1, sizeof(perlin_state));
+    SeedPerlin(PerlinState, 101);
+    
+    u32 *CopyPixel = TestPerlinPixels;
+    u32 PixelCount = 0;
+    for (u32 Y = 0;
+         Y < 1024;
+         ++Y)
+    {
+        for (u32 X = 0;
+             X < 1024;
+             ++X)
+        {
+            f32 Intensity = PerlinSample(PerlinState, X / 400.0f, Y / 400.0f) * 0.5f + 0.5f;
+            if (Intensity < 0.0f)
+            {
+                printf("%d: %f\n", PixelCount, Intensity);
+            }
+            u8 IntensityI = (u8) (255 * Intensity);
+            u32 Color = (IntensityI << 24 |
+                         IntensityI << 16 |
+                         IntensityI << 8 |
+                         255);
+            // printf("%x\n", Color);
+            *CopyPixel++ = Color;
+            PixelCount++;
+        }
+    }
+    
+    SDL_Surface *TestPerlinSurface = SDL_CreateRGBSurfaceFrom((void *) TestPerlinPixels,
+                                                              1024,
+                                                              1024,
+                                                              32, // depth in bits
+                                                              1024 * 4, // pitch in bytes
+                                                              0xFF000000, 0x00FF0000, 0x0000FF00, 0x000000FF);
+    
+    i32 Result = SDL_SaveBMP(TestPerlinSurface, "temp/testPerlin.bmp");
+    printf("%s\n", SDL_GetError());
+    // Assert(Result);
     
     b32 ShouldQuit = false;
     while (!ShouldQuit)
