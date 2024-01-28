@@ -1148,6 +1148,27 @@ Vec2I(i32 Value)
     return Result;
 }
 
+inline vec2i
+operator+(vec2i A, vec2i B)
+{
+    vec2i Result = Vec2I(A.X + B.X, A.Y + B.Y);
+    return Result;
+}
+
+inline vec2i
+operator-(vec2i A, vec2i B)
+{
+    vec2i Result = Vec2I(A.X - B.X, A.Y - B.Y);
+    return Result;
+}
+
+inline vec2i
+operator*(vec2i A, vec2i B)
+{
+    vec2i Result = Vec2I(A.X * B.X, A.Y * B.Y);
+    return Result;
+}
+
 // -------------------------------------------------------------------------------
 // VECTOR 3 INTEGER --------------------------------------------------------------
 // -------------------------------------------------------------------------------
@@ -1207,6 +1228,27 @@ Vec3IAreEqual(vec3i A, vec3i B)
     b32 Result = (A.X == B.X &&
                   A.Y == B.Y &&
                   A.Z == B.Z);
+    return Result;
+}
+
+inline vec3i
+operator+(vec3i A, vec3i B)
+{
+    vec3i Result = Vec3I(A.X + B.X, A.Y + B.Y, A.Z + B.Z);
+    return Result;
+}
+
+inline vec3i
+operator-(vec3i A, vec3i B)
+{
+    vec3i Result = Vec3I(A.X - B.X, A.Y - B.Y, A.Z - B.Z);
+    return Result;
+}
+
+inline vec3i
+operator*(vec3i A, vec3i B)
+{
+    vec3i Result = Vec3I(A.X * B.X, A.Y * B.Y, A.Z * B.Z);
     return Result;
 }
 
