@@ -85,8 +85,7 @@ struct game_state
     entity OtherEntity;
 
     vec3i CameraCenterTile;
-    f32 CameraOffsetX;
-    f32 CameraOffsetY;
+    vec2 CameraOffset;
     
     f32 CameraZoom;
     b32 CameraInitialZoom;

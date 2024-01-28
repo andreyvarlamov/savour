@@ -1149,6 +1149,13 @@ Vec2I(i32 Value)
 }
 
 inline vec2i
+Vec2I(vec2 V_F)
+{
+    vec2i Result = Vec2I((i32) V_F.X, (i32) V_F.Y);
+    return Result;
+}
+
+inline vec2i
 operator+(vec2i A, vec2i B)
 {
     vec2i Result = Vec2I(A.X + B.X, A.Y + B.Y);
@@ -1163,9 +1170,72 @@ operator-(vec2i A, vec2i B)
 }
 
 inline vec2i
+operator-(vec2i V)
+{
+    vec2i Result = Vec2I(-V.X, -V.Y);
+    return Result;
+}
+
+inline vec2i
 operator*(vec2i A, vec2i B)
 {
     vec2i Result = Vec2I(A.X * B.X, A.Y * B.Y);
+    return Result;
+}
+
+inline vec2i
+operator*(vec2i V, i32 I)
+{
+    vec2i Result = Vec2I(V.X * I, V.Y * I);
+    return Result;
+}
+
+inline vec2i
+operator*(vec2i V, f32 I)
+{
+    vec2i Result = Vec2I((i32) (V.X * I), (i32) (V.Y * I));
+    return Result;
+}
+
+inline vec2i
+operator*(i32 I, vec2i V)
+{
+    vec2i Result = Vec2I(V.X * I, V.Y * I);
+    return Result;
+}
+
+inline vec2i
+operator*(f32 I, vec2i V)
+{
+    vec2i Result = Vec2I((i32) (V.X * I), (i32) (V.Y * I));
+    return Result;
+}
+
+inline vec2i
+operator/(vec2i V, i32 I)
+{
+    vec2i Result = Vec2I(V.X / I, V.Y / I);
+    return Result;
+}
+
+inline vec2i
+operator/(vec2i V, f32 I)
+{
+    vec2i Result = Vec2I((i32) (V.X / I), (i32) (V.Y / I));
+    return Result;
+}
+
+inline vec2i
+operator/(i32 I, vec2i V)
+{
+    vec2i Result = Vec2I(I / V.X, I / V.Y);
+    return Result;
+}
+
+inline vec2i
+operator/(f32 I, vec2i V)
+{
+    vec2i Result = Vec2I((i32) (I / V.X), (i32) (I / V.Y));
     return Result;
 }
 
