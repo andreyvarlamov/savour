@@ -375,130 +375,185 @@ ExponentialInterpolationWhereIs(f32 Min, f32 Max, f32 V)
 }
 
 void
+CalculateChunkRectInCameraView(i32 ScreenWidth, i32 ScreenHeight, vec2i TileDim, vec3i CameraPosition, vec3i ChunkDim,
+                               vec3i *Out_ChunkMin, vec3i *Out_ChunkMax)
+{
+    f32 ScreenHalfWidthInTiles = ((f32) ScreenWidth * 0.5f) / (f32) TileDim.X;
+    f32 ScreenHalfHeightInTiles = ((f32) ScreenHeight * 0.5f) / (f32) TileDim.Y;
+
+    i32 TileMinX = CameraPosition.X + (i32) FloorF(-ScreenHalfWidthInTiles);
+    i32 TileMaxX = CameraPosition.X + (i32) CeilingF(ScreenHalfWidthInTiles);
+    i32 TileMinY = CameraPosition.Y + (i32) FloorF(-ScreenHalfHeightInTiles);
+    i32 TileMaxY = CameraPosition.Y + (i32) CeilingF(ScreenHalfHeightInTiles);
+
+    *Out_ChunkMin = GetChunkPFromTileP(Vec3I(TileMinX, TileMinY, CameraPosition.Z), ChunkDim);
+    *Out_ChunkMax = GetChunkPFromTileP(Vec3I(TileMaxX, TileMaxY, CameraPosition.Z), ChunkDim);
+
+    #if 0
+    printf("TileMin(%d, %d); TileMax(%d, %d); ", TileMinX, TileMinY, TileMaxX, TileMaxY);
+    printf("TileDim(%d, %d); ", TileDim.X, TileDim.Y);
+    printf("ScreenHalfWidthInTiles(%0.3f, %0.3f); ", ScreenHalfWidthInTiles, ScreenHalfHeightInTiles);
+    printf("ChunkMin(%d, %d); ChunkMax(%d, %d)\n", ChunkMin.X, ChunkMin.Y, ChunkMax.X, ChunkMax.Y);
+    #endif
+}
+
+entity *
+GetFreeEntity(game_state *GameState)
+{
+    entity *Result;
+    
+    if (GameState->EntityFreeList)
+    {
+        Result = GameState->EntityFreeList;
+        GameState->EntityFreeList = GameState->EntityFreeList->Next;
+        Result->Next = 0;
+    }
+    else
+    {
+        Assert(GameState->NextEmptyEntityIndex < WorldEntityCount);
+        Result = GameState->WorldEntities + GameState->NextEmptyEntityIndex++;
+    }
+
+    Assert(Result);
+
+    return Result;
+}
+
+void
+GenerateChunkTerrain(vec3i ChunkP, game_state *GameState, memory_arena *WorldArena)
+{
+    local_persist i32 CurrentIndex = 0;
+    printf("Gen ch#%d - P(%d,%d,%d)... ", CurrentIndex++, ChunkP.X, ChunkP.Y, ChunkP.Z);
+    
+    chunk *Chunk = MemoryArena_PushStruct(WorldArena, chunk);
+    Chunk->P = ChunkP;
+    Chunk->Next = GameState->Chunks;
+    GameState->Chunks = Chunk;
+    
+    for (i32 I = 0;
+         I < ChunkEntityCount;
+         ++I)
+    {
+        entity *TopEntity = GetFreeEntity(GameState);
+
+        i32 X = I % GameState->ChunkDim.X;
+        i32 Y = I / GameState->ChunkDim.Y;
+        i32 Z = ChunkP.Z;
+        
+        vec3i Position = GetLeftmostTilePFromChunkP(ChunkP, GameState->ChunkDim) + Vec3I(X, Y, Z);
+
+        f32 Intensity = PerlinSampleOctaves(Position.X / 32.0f, Position.Y / 32.0f, 1.8f, 0.5f, 6, 101);
+        Intensity = PerlinNormalize(Intensity);
+
+        // NOTE: Grass
+        TopEntity->Glyph = (((rand() % 2) ==  0) ? 176 : 177);
+        TopEntity->ForegroundColor = Vec3(0.4f, 0.7f, 0.4f);
+        TopEntity->BackgroundColor = Vec3(0.3f, 0.6f, 0.4f);
+        TopEntity->P = Position;
+        TopEntity->IsBlocking = false;
+        TopEntity->IsOpaque = false;
+
+        if (Intensity <= 0.4f)
+        {
+            // NOTE: Water
+            entity *OldTop = TopEntity;
+            TopEntity = GetFreeEntity(GameState);
+            TopEntity->Next = OldTop;
+            
+            TopEntity->Glyph = (((rand() % 2) ==  0) ? 247 : 126);
+            TopEntity->ForegroundColor = Vec3(0.3f, 0.3f, 0.8f);
+            TopEntity->BackgroundColor = Vec3(0.2f, 0.2f, 0.6f);
+            TopEntity->P = Position;
+            TopEntity->IsBlocking = false;
+            TopEntity->IsOpaque = false;
+        }
+        else if (Intensity >= 0.6f)
+        {
+            // NOTE: Mountain
+            entity *OldTop = TopEntity;
+            TopEntity = GetFreeEntity(GameState);
+            TopEntity->Next = OldTop;
+            
+            TopEntity->Glyph = (((rand() % 2) == 0) ? '#' : '%');
+            TopEntity->ForegroundColor = Vec3(0.42f);
+            TopEntity->BackgroundColor = Vec3(0.4f);
+            TopEntity->P = Position;
+            TopEntity->IsBlocking = true;
+            TopEntity->IsOpaque = true;
+        }
+        else
+        {
+            // NOTE: Grass is always there
+        }
+
+        Chunk->Entities[I] = TopEntity;
+    }
+    printf("Done. E:%d. WA:%zuKB/%zuKB \n", GameState->NextEmptyEntityIndex, WorldArena->Used / 1024, WorldArena->Size / 1024);
+}
+
+void
 GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, platform_image *OffscreenBuffer, b32 *GameShouldQuit)
 {
     game_state *GameState = (game_state *) GameMemory->Storage;
 
-    local_persist i32 TileMinX = 0;
-    local_persist i32 TileMaxX = 0;
-    local_persist i32 TileMinY = 0;
-    local_persist i32 TileMaxY = 0;
-
-    local_persist vec3i ChunkMin = Vec3I();
-    local_persist vec3i ChunkMax = Vec3I();
-
     if (!GameMemory->IsInitialized)
     {
+        printf("Need %zu MB for entities.\n", (WorldEntityCount * sizeof(entity) / 1024) / 1024);
+        
+        // NOTE: Initialize memory arenas
+        u8 *RootArenaBase = (u8 *) GameMemory->Storage + sizeof(game_state);
+        size_t RootArenaSize = GameMemory->StorageSize - sizeof(game_state);
+        GameState->RootArena = MemoryArena(RootArenaBase, RootArenaSize);
+
+        GameState->WorldArena = MemoryArenaNested(&GameState->RootArena, Megabytes(4));
+        
         // TODO: Temporary
         srand((u32)time(NULL));
 
+        // NOTE: Initialize font atas;
         GameState->FontAtlas.Image = GetImageFromPlatformImage(Platform_LoadBMP("resources/font.bmp"));
         GameState->FontAtlas.AtlasWidth = 16;
         GameState->FontAtlas.AtlasHeight = 16;
         GameState->FontAtlas.GlyphPxWidth = 48;
         GameState->FontAtlas.GlyphPxHeight = 72;
 
+        // NOTE: Initialize camera
         GameState->CameraZoomMin = 0.2f;
         GameState->CameraZoomMax = 10.0f;
         GameState->CameraZoomLogNeutral = ExponentialInterpolationWhereIs(GameState->CameraZoomMin, GameState->CameraZoomMax, 1.0f);
-        
-        GameState->CameraZoomLogCurrent = 0.3f;
-        GameState->CameraZoomIsInitial = true;
-
+        GameState->CameraZoomLogCurrent = GameState->CameraZoomLogNeutral;
+        // GameState->CameraZoomIsInitial = true;
         GameState->CameraTileOffsetMax = 32.0f;
+        GameState->CameraCenterTile = Vec3I();
 
         f32 CameraZoomCurrent = ExponentialInterpolation(GameState->CameraZoomMin, GameState->CameraZoomMax, GameState->CameraZoomLogCurrent);
         GameState->TileDim = Vec2I(GameState->FontAtlas.GlyphPxWidth, GameState->FontAtlas.GlyphPxHeight) * CameraZoomCurrent;
+        GameState->TileDimForTest = Vec2I(GameState->FontAtlas.GlyphPxWidth, GameState->FontAtlas.GlyphPxHeight);// * ExponentialInterpolation(GameState->CameraZoomMin, GameState->CameraZoomMax, 0.0f);
 
+        // NOTE: Initialize first chunks
         GameState->ChunkDim = Vec3I(16,16,1);
-        
-        vec3i PlayerInitialPosition = Vec3I();
 
-        f32 ScreenHalfWidthInTiles = ((f32) OffscreenBuffer->Width * 0.5f) / (f32) GameState->TileDim.X;
-        f32 ScreenHalfHeightInTiles = ((f32) OffscreenBuffer->Height * 0.5f) / (f32) GameState->TileDim.Y;
-
-        printf("TileDim(%d, %d); ", GameState->TileDim.X, GameState->TileDim.Y);
-        printf("ScreenHalfWidthInTiles(%0.3f, %0.3f); ", ScreenHalfWidthInTiles, ScreenHalfHeightInTiles);
-
-        TileMinX = PlayerInitialPosition.X + (i32) FloorF(-ScreenHalfWidthInTiles);
-        TileMaxX = PlayerInitialPosition.X + (i32) CeilingF(ScreenHalfWidthInTiles);
-        TileMinY = PlayerInitialPosition.Y + (i32) FloorF(-ScreenHalfHeightInTiles);
-        TileMaxY = PlayerInitialPosition.Y + (i32) CeilingF(ScreenHalfHeightInTiles);
-        printf("TileMin(%d, %d); TileMax(%d, %d); ", TileMinX, TileMinY, TileMaxX, TileMaxY);
-
-        ChunkMin = GetChunkPFromTileP(Vec3I(TileMinX, TileMinY, 0), GameState->ChunkDim);
-        ChunkMax = GetChunkPFromTileP(Vec3I(TileMaxX, TileMaxY, 0), GameState->ChunkDim);
+        vec3i ChunkMin, ChunkMax;
+        CalculateChunkRectInCameraView(OffscreenBuffer->Width, OffscreenBuffer->Height,
+                                       GameState->TileDimForTest, GameState->CameraCenterTile, GameState->ChunkDim,
+                                       &ChunkMin, &ChunkMax);
         printf("ChunkMin(%d, %d); ChunkMax(%d, %d)\n", ChunkMin.X, ChunkMin.Y, ChunkMax.X, ChunkMax.Y);
-        
-        #if 0
-        for (i32 MapI = 0;
-             MapI < GameState->MapWidth * GameState->MapHeight;
-             ++MapI)
+
+        for (i32 ChunkY = ChunkMin.Y;
+             ChunkY <= ChunkMax.Y;
+             ++ChunkY)
         {
-            entity_node *HeadEntityNode = GameState->MapTable + MapI;
-            
-            i32 X = MapI % GameState->MapWidth;
-            i32 Y = MapI / GameState->MapWidth;
-            vec3i Position = Vec3I(X, Y, 0);
-
-            f32 Intensity = PerlinSampleOctaves(X / 32.0f, Y / 32.0f, 1.8f, 0.5f, 6, 101);
-            Intensity = PerlinNormalize(Intensity);
-
-            if (Intensity <= 0.4f)
+            for (i32 ChunkX = ChunkMin.X;
+                 ChunkX <= ChunkMax.X;
+                 ++ChunkX)
             {
-                // NOTE: Water
-                HeadEntityNode->E.Glyph = (((rand() % 2) ==  0) ? 247 : 126);
-                HeadEntityNode->E.ForegroundColor = Vec3(0.3f, 0.3f, 0.8f);
-                HeadEntityNode->E.BackgroundColor = Vec3(0.2f, 0.2f, 0.6f);
-                HeadEntityNode->E.Position = Position;
-                HeadEntityNode->E.IsBlocking = false;
-                HeadEntityNode->E.IsOpaque = false;
-                HeadEntityNode->IsPopulated = true;
+                GenerateChunkTerrain(Vec3I(ChunkX, ChunkY, GameState->CameraCenterTile.Z), GameState, &GameState->WorldArena);
             }
-            else if (Intensity >= 0.6f)
-            {
-                // NOTE: Mountain
-                HeadEntityNode->E.Glyph = 219;
-                HeadEntityNode->E.ForegroundColor = Vec3(0.6f);
-                HeadEntityNode->E.BackgroundColor = Vec3(0);
-                HeadEntityNode->E.Position = Position;
-                HeadEntityNode->E.IsBlocking = true;
-                HeadEntityNode->E.IsOpaque = true;
-                HeadEntityNode->IsPopulated = true;
-            }
-            else
-            {
-                // NOTE: Grass
-                HeadEntityNode->E.Glyph = (((rand() % 2) ==  0) ? 176 : 177);
-                HeadEntityNode->E.ForegroundColor = Vec3(0);
-                HeadEntityNode->E.BackgroundColor = Vec3(0.3f, 0.6f, 0.4f);
-                HeadEntityNode->E.Position = Position;
-                HeadEntityNode->E.IsBlocking = false;
-                HeadEntityNode->E.IsOpaque = false;
-                HeadEntityNode->IsPopulated = true;
-            }
-
-            // if (X == 0 || X == (GameState->MapWidth - 1) ||
-            //     Y == 0 || Y == (GameState->MapHeight - 1))
-            // {
-            //     entity_node *FreeEntityNode = GetFreeEntityNodeInMapTable(GameState);
-
-            //     FreeEntityNode->E.Position = Position;
-            //     FreeEntityNode->E.Glyph = '#';
-            //     FreeEntityNode->E.ForegroundColor = Vec3(1);
-            //     FreeEntityNode->E.BackgroundColor = Vec3(0);
-            //     FreeEntityNode->E.IsBlocking = true;
-            //     FreeEntityNode->E.IsOpaque = true;
-            //     FreeEntityNode->IsPopulated = true;
-
-            //     HeadEntityNode->Next = FreeEntityNode;
-            // }
         }
-        #endif
 
         // NOTE: Create player entity
         {
-            GameState->Player.P = PlayerInitialPosition;
+            GameState->Player.P = GameState->CameraCenterTile;
             GameState->Player.Glyph = '@';
             GameState->Player.ForegroundColor = Vec3(0);
             GameState->Player.BackgroundColor = Vec3(0,0,1);
@@ -507,7 +562,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, platform_ima
         }
 
         {
-            GameState->OtherEntity.P = PlayerInitialPosition + Vec3I(3, 3, 0);
+            GameState->OtherEntity.P = GameState->CameraCenterTile + Vec3I(3, 3, 0);
             GameState->OtherEntity.Glyph = 'A';
             GameState->OtherEntity.ForegroundColor = Vec3(0);
             GameState->OtherEntity.BackgroundColor = Vec3(0,1,0);
@@ -649,24 +704,39 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, platform_ima
         GameState->CameraTileOffset.X = 0.0f;
         GameState->CameraTileOffset.Y = 0.0f;
     }
+
+    vec3i ChunkMin, ChunkMax;
+    CalculateChunkRectInCameraView(OffscreenBuffer->Width, OffscreenBuffer->Height,
+                                   GameState->TileDimForTest, GameState->CameraCenterTile, GameState->ChunkDim,
+                                   &ChunkMin, &ChunkMax);
+    // printf("ChunkMin(%d, %d); ChunkMax(%d, %d)\n", ChunkMin.X, ChunkMin.Y, ChunkMax.X, ChunkMax.Y);
+
+    // NOTE: Initialize chunks that haven't been yet
+    for (i32 ChunkY = ChunkMin.Y;
+         ChunkY <= ChunkMax.Y;
+         ++ChunkY)
+    {
+        for (i32 ChunkX = ChunkMin.X;
+             ChunkX <= ChunkMax.X;
+             ++ChunkX)
+        {
+            vec3i RequestedP = Vec3I(ChunkX, ChunkY, GameState->CameraCenterTile.Z);
+            chunk *SearchChunk = GameState->Chunks;
+            while (SearchChunk)
+            {
+                if (Vec3IAreEqual(SearchChunk->P, RequestedP))
+                {
+                    break;
+                }
+                SearchChunk = SearchChunk->Next;
+            }
+            if (!SearchChunk)
+            {
+                GenerateChunkTerrain(Vec3I(ChunkX, ChunkY, 0), GameState, &GameState->WorldArena);
+            }
+        }
+    }
     
-    f32 ScreenHalfWidthInTiles = ((f32) OffscreenBuffer->Width * 0.5f) / (f32) GameState->TileDim.X;
-    f32 ScreenHalfHeightInTiles = ((f32) OffscreenBuffer->Height * 0.5f) / (f32) GameState->TileDim.Y;
-
-    printf("TileDim(%d, %d); ", GameState->TileDim.X, GameState->TileDim.Y);
-    printf("ScreenHalfWidthInTiles(%0.3f, %0.3f); ", ScreenHalfWidthInTiles, ScreenHalfHeightInTiles);
-
-    vec3i InitialPosition = GameState->Player.P;
-    TileMinX = InitialPosition.X + (i32) FloorF(-ScreenHalfWidthInTiles);
-    TileMaxX = InitialPosition.X + (i32) CeilingF(ScreenHalfWidthInTiles);
-    TileMinY = InitialPosition.Y + (i32) FloorF(-ScreenHalfHeightInTiles);
-    TileMaxY = InitialPosition.Y + (i32) CeilingF(ScreenHalfHeightInTiles);
-    printf("TileMin(%d, %d); TileMax(%d, %d)", TileMinX, TileMinY, TileMaxX, TileMaxY);
-
-    ChunkMin = GetChunkPFromTileP(Vec3I(TileMinX, TileMinY, 0), GameState->ChunkDim);
-    ChunkMax = GetChunkPFromTileP(Vec3I(TileMaxX, TileMaxY, 0), GameState->ChunkDim);
-    printf("ChunkMin(%d, %d); ChunkMax(%d, %d)\n", ChunkMin.X, ChunkMin.Y, ChunkMax.X, ChunkMax.Y);
-
     // printf("TileDim(%d,%d); CameraTileOffset(%0.5f,%0.5f)\n", GameState->TileDim.X, GameState->TileDim.Y, GameState->CameraTileOffset.X, GameState->CameraTileOffset.Y);
 
     //
@@ -687,13 +757,59 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, platform_ima
     DestRect.Width = GameState->TileDim.X;
     DestRect.Height = GameState->TileDim.Y;
 
-    // TODO: Cull unseen entities on the level of selecting chunks to draw, or even tiles to draw
-    entity *Entities[] = { &GameState->Player, &GameState->OtherEntity };
+    for (i32 ChunkY = ChunkMin.Y;
+         ChunkY <= ChunkMax.Y;
+         ++ChunkY)
+    {
+        for (i32 ChunkX = ChunkMin.X;
+             ChunkX <= ChunkMax.X;
+             ++ChunkX)
+        {
+    // for (i32 ChunkY = -100;
+    //      ChunkY <= 100;
+    //      ++ChunkY)
+    // {
+    //     for (i32 ChunkX = -100;
+    //          ChunkX <= 100;
+    //          ++ChunkX)
+    //     {
+            vec3i RequestedP = Vec3I(ChunkX, ChunkY, GameState->CameraCenterTile.Z);
+            chunk *Chunk = GameState->Chunks;
+            while (Chunk)
+            {
+                if (Vec3IAreEqual(Chunk->P, RequestedP))
+                {
+                    break;
+                }
+                Chunk = Chunk->Next;
+            }
+            if (Chunk)
+            {
+                for (u32 ChunkEntityI = 0;
+                     ChunkEntityI < ChunkEntityCount;
+                     ++ChunkEntityI)
+                {
+                    entity *TopEntity = Chunk->Entities[ChunkEntityI];
+
+                    vec2i EntityRelPxP = (Vec2I(TopEntity->P) - Vec2I(GameState->CameraCenterTile)) * GameState->TileDim + AllCameraOffsets;
+                    DestRect.X = EntityRelPxP.X;
+                    DestRect.Y = EntityRelPxP.Y;
+                    RenderGlyph(GameState->FontAtlas, TopEntity->Glyph, ScreenImage, DestRect, TopEntity->BackgroundColor, TopEntity->ForegroundColor);
+                }
+            }
+            else
+            {
+                Noop;
+            }
+        }
+    }
+    
+    entity *AdditionalEntities[] = { &GameState->Player, &GameState->OtherEntity };
     for (u32 I = 0;
-         I < ArrayCount(Entities);
+         I < ArrayCount(AdditionalEntities);
          ++I)
     {
-        entity *Entity = Entities[I];
+        entity *Entity = AdditionalEntities[I];
 
         vec2i EntityRelPxP = (Vec2I(Entity->P) - Vec2I(GameState->CameraCenterTile)) * GameState->TileDim + AllCameraOffsets;
         DestRect.X = EntityRelPxP.X;
@@ -701,6 +817,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, platform_ima
         RenderGlyph(GameState->FontAtlas, Entity->Glyph, ScreenImage, DestRect, Entity->BackgroundColor, Entity->ForegroundColor);
     }
 
+    #if 0
     vec3i *Chunks[] = { &ChunkMin, &ChunkMax };
 
     for (u32 I = 0;
@@ -757,5 +874,5 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, platform_ima
         RenderGlyph(GameState->FontAtlas, '#', ScreenImage, DestRect, Vec3(1), Vec3(0));
 
     }
-
+    #endif
 }

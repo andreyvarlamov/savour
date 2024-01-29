@@ -123,7 +123,7 @@ PerlinSample(f32 X, f32 Y, f32 Z, i32 Seed)
     local_persist b32 PrintedOne = false;
     if (Result < 0.0f && !PrintedOne)
     {
-        printf("%f\n", Result);
+        /* printf("%f\n", Result); */
         PrintedOne = true;
     }
     return Result;

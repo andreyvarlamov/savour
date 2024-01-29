@@ -58,19 +58,23 @@ struct entity
 };
 
 // NOTE: Chunk 16x16x1
+#define ChunkEntityCount 256
 struct chunk
 {
     vec3i P;
     
-    entity *Entities[256];
+    entity *Entities[ChunkEntityCount];
 
     chunk *Next;
 };
 
-//#define MapTableEntryCount 65536 //16384
+#define WorldEntityCount 1000000 //16384
 
 struct game_state
 {
+    memory_arena RootArena;
+    memory_arena WorldArena;
+    
     font_atlas FontAtlas;
     b32 IsBilinear;
 
@@ -78,13 +82,15 @@ struct game_state
     chunk *Chunks;
     vec3i ChunkDim;
 
-    entity *Entities[65536];
+    entity WorldEntities[WorldEntityCount];
+    u32 NextEmptyEntityIndex;
     entity *EntityFreeList;
 
     entity Player;
     entity OtherEntity;
 
     vec2i TileDim;
+    vec2i TileDimForTest;
 
     vec3i CameraCenterTile;
     vec2 CameraTileOffset;
