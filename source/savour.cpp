@@ -338,6 +338,42 @@ GetPixelFromTile(i32 Tile, i32 TileDim)
     return Pixel;
 }
 
+inline f32
+ExponentialInterpolation(f32 Min, f32 Max, f32 T)
+{
+    f32 LogMin = log(Min);
+    f32 LogMax = log(Max);
+    f32 Lerp = LogMin + (LogMax - LogMin) * T;
+    
+    f32 Result = exp(Lerp);
+    return Result;
+}
+
+inline f32
+ExponentialInterpolationWhereIs(f32 Min, f32 Max, f32 V)
+{
+    f32 LogMin = log(Min);
+    f32 LogMax = log(Max);
+    f32 LogV = log(V);
+
+    f32 Result;
+    
+    if (LogV >= LogMax)
+    {
+        Result = 1.0f;
+    }
+    else if (LogV <= LogMin)
+    {
+        Result = 0.0f;
+    }
+    else
+    {
+        Result = (LogV - LogMin) / (LogMax - LogMin);
+    }
+    
+    return Result;
+}
+
 void
 GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, platform_image *OffscreenBuffer, b32 *GameShouldQuit)
 {
@@ -429,9 +465,13 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, platform_ima
             // }
         }
         #endif
+
+        GameState->CameraZoomMin = 0.2f;
+        GameState->CameraZoomMax = 10.0f;
+        GameState->CameraZoomLogNeutral = ExponentialInterpolationWhereIs(GameState->CameraZoomMin, GameState->CameraZoomMax, 1.0f);
         
-        GameState->CameraZoom = 3.0f;
-        GameState->CameraInitialZoom = true;
+        GameState->CameraZoomLogCurrent = 1.0f;
+        GameState->CameraZoomIsInitial = true;
 
         // NOTE: Create player entity
         {
@@ -488,7 +528,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, platform_ima
     GameState->CameraCenterTile = GameState->Player.P;
     if (PlayerMoved)
     {
-        printf("%d,%d,%d\n", GameState->Player.P.X, GameState->Player.P.Y, GameState->Player.P.Z);
+        // printf("%d,%d,%d\n", GameState->Player.P.X, GameState->Player.P.Y, GameState->Player.P.Z);
     }
 
     // NOTE: Test collisions
@@ -531,27 +571,61 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, platform_ima
         GameState->CameraOffset.Y = 0.0f;
     }
 
-    f32 ZoomPerSecond = 5.0f;
+    f32 LogZoomPerSecond = 1.0f;
     if (Platform_KeyIsDown(GameInput, SDL_SCANCODE_PAGEUP))
     {
-        GameState->CameraZoom += ZoomPerSecond * GameInput->DeltaTime;
-        GameState->CameraInitialZoom = false;
+        if (Platform_KeyJustPressed(GameInput, SDL_SCANCODE_PAGEUP))
+        {
+            GameState->CameraZoomStartedBeforeNeutral = (GameState->CameraZoomLogCurrent < GameState->CameraZoomLogNeutral);
+        }
+        
+        GameState->CameraZoomLogCurrent += LogZoomPerSecond * GameInput->DeltaTime;
+        
+        if (GameState->CameraZoomStartedBeforeNeutral && GameState->CameraZoomLogCurrent > GameState->CameraZoomLogNeutral)
+        {
+            GameState->CameraZoomLogCurrent = GameState->CameraZoomLogNeutral;
+        }
+        else if (GameState->CameraZoomLogCurrent > 1.0f)
+        {
+            GameState->CameraZoomLogCurrent = 1.0f;
+        }
+        
+        GameState->CameraZoomIsInitial = false;
     }
-    if (Platform_KeyIsDown(GameInput, SDL_SCANCODE_PAGEDOWN))
+    else if (Platform_KeyIsDown(GameInput, SDL_SCANCODE_PAGEDOWN))
     {
-        GameState->CameraZoom -= ZoomPerSecond * GameInput->DeltaTime;
-        GameState->CameraInitialZoom = false;
+        f32 ZoomBefore = 0.0f;
+        if (Platform_KeyJustPressed(GameInput, SDL_SCANCODE_PAGEDOWN))
+        {
+            GameState->CameraZoomStartedBeforeNeutral = (GameState->CameraZoomLogCurrent > GameState->CameraZoomLogNeutral);
+        }
+
+        ZoomBefore = GameState->CameraZoomLogCurrent;
+        GameState->CameraZoomLogCurrent -= LogZoomPerSecond * GameInput->DeltaTime;
+        
+        if (GameState->CameraZoomStartedBeforeNeutral && GameState->CameraZoomLogCurrent < GameState->CameraZoomLogNeutral)
+        {
+            GameState->CameraZoomLogCurrent = GameState->CameraZoomLogNeutral;
+        }
+        else if (GameState->CameraZoomLogCurrent < 0.0f)
+        {
+            GameState->CameraZoomLogCurrent = 0.0f;
+        }
+
+        GameState->CameraZoomIsInitial = false;
     }
 
-    if (PlayerMoved && GameState->CameraInitialZoom)
+    if (PlayerMoved && GameState->CameraZoomIsInitial)
     {
-        GameState->CameraZoom -= 0.4f;
-        if (GameState->CameraZoom < 1.05f)
+        GameState->CameraZoomLogCurrent -= 0.2f;
+        if (GameState->CameraZoomLogCurrent < GameState->CameraZoomLogNeutral + 0.05f)
         {
-            GameState->CameraZoom = 1.0f;
-            GameState->CameraInitialZoom = false;
+            GameState->CameraZoomLogCurrent = GameState->CameraZoomLogNeutral;
+            GameState->CameraZoomIsInitial = false;
         }
     }
+
+    f32 CameraZoomCurrent = ExponentialInterpolation(GameState->CameraZoomMin, GameState->CameraZoomMax, GameState->CameraZoomLogCurrent);
 
     //
     // NOTE: RENDER
@@ -562,7 +636,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, platform_ima
     ScreenImage.Width = OffscreenBuffer->Width;
     ScreenImage.Height = OffscreenBuffer->Height;
     
-    vec2i TileDim = Vec2I(GameState->FontAtlas.GlyphPxWidth, GameState->FontAtlas.GlyphPxHeight) * GameState->CameraZoom;
+    vec2i TileDim = Vec2I(GameState->FontAtlas.GlyphPxWidth, GameState->FontAtlas.GlyphPxHeight) * CameraZoomCurrent;
     vec2i TileHalfDim = TileDim * 0.5f;
     vec2i ScreenHalfDim = Vec2I(ScreenImage.Width, ScreenImage.Height) * 0.5f;
     vec2i CameraPxOffset = Vec2I(GameState->CameraOffset);

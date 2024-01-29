@@ -86,9 +86,13 @@ struct game_state
 
     vec3i CameraCenterTile;
     vec2 CameraOffset;
-    
-    f32 CameraZoom;
-    b32 CameraInitialZoom;
+
+    f32 CameraZoomMin;
+    f32 CameraZoomMax;
+    f32 CameraZoomLogNeutral;
+    f32 CameraZoomLogCurrent;
+    b32 CameraZoomStartedBeforeNeutral;
+    b32 CameraZoomIsInitial;
 };
 
 #endif
