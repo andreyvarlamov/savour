@@ -20,14 +20,14 @@ union vec2
     f32 E[2];
 };
 
-internal inline vec2
+inline vec2
 Vec2()
 {
     vec2 Result = {};
     return Result;
 }
 
-internal inline vec2
+inline vec2
 Vec2(f32 X, f32 Y)
 {
     vec2 Result = {};
@@ -38,93 +38,136 @@ Vec2(f32 X, f32 Y)
     return Result;
 }
 
-internal inline vec2
+inline vec2
+Vec2(f32 V)
+{
+    vec2 Result = Vec2(V, V);
+    return Result;
+}
+
+inline vec2
 operator+(vec2 V0, vec2 V1)
 {
     return vec2 { V0.X + V1.X, V0.Y + V1.Y };
 }
 
-internal inline vec2
+inline vec2
 operator-(vec2 V0, vec2 V1)
 {
     return vec2 { V0.X - V1.X, V0.Y - V1.Y };
 }
 
-internal inline vec2
+inline vec2
 operator-(vec2 V0)
 {
     return vec2 { -V0.X, -V0.Y };
 }
 
-internal inline vec2
+inline vec2
 operator*(vec2 V, f32 S)
 {
     return vec2 { V.X * S, V.Y * S };
 }
 
-internal inline  vec2
+inline  vec2
 operator*(f32 S, vec2 V)
 {
     return vec2 { V.X * S, V.Y * S };
 }
 
-internal inline vec2
+inline vec2
+operator*(vec2 V0, vec2 V1)
+{
+    vec2 Result = Vec2(V0.X * V1.X, V0.Y * V1.Y);
+    return Result;
+}
+
+inline vec2
 operator/(vec2 V, f32 S)
 {
     return vec2 { V.X / S, V.Y / S };
 }
 
-internal inline vec2 &
+inline vec2 &
 operator+=(vec2 &V0, vec2 V1)
 {
     V0 = V0 + V1;
     return V0;
 }
 
-internal inline vec2 &
+inline vec2 &
 operator-=(vec2 &V0, vec2 V1)
 {
     V0 = V0 - V1;
     return V0;
 }
 
-internal inline vec2 &
+inline vec2 &
 operator*=(vec2 &V, f32 S)
 {
     V = V * S;
     return V;
 }
 
-internal inline vec2 &
+inline vec2 &
 operator/=(vec2 &V, f32 S)
 {
     V = V / S;
     return V;
 }
 
-internal inline f32
+inline f32
 VecDot(vec2 V0, vec2 V1)
 {
     return (V0.X * V1.X + V0.Y * V1.Y);
 }
 
-internal inline f32
+inline f32
 VecLengthSq(vec2 V)
 {
     return VecDot(V, V);
 }
 
-internal inline f32
+inline f32
 VecLength(vec2 V)
 {
     return SqrtF(VecLengthSq(V));
 }
 
-internal inline vec2
+inline vec2
 VecNormalize(vec2 V)
 {
     f32 Length = VecLength(V);
     return ((Length != 0.0f) ? (V / Length) : V);
+}
+
+inline vec2
+VecClamp(vec2 V, vec2 Min, vec2 Max)
+{
+    if (V.X < Min.X) V.X = Min.X; else if (V.X > Max.X) V.X = Max.X;
+    if (V.Y < Min.Y) V.Y = Min.Y; else if (V.Y > Max.Y) V.Y = Max.Y;
+    return V;
+}
+
+inline vec2
+VecClamp(vec2 V, f32 Min, f32 Max)
+{
+    vec2 Result = VecClamp(V, Vec2(Min), Vec2(Max));
+    return Result;
+}
+
+inline vec2
+VecClamp(vec2 V, vec2 Abs)
+{
+    vec2 Result = VecClamp(V, -Abs, Abs);
+    return Result;
+}
+
+inline vec2
+VecClamp(vec2 V, f32 Abs)
+{
+    vec2 Result = VecClamp(V, -Abs, Abs);
+    return Result;
 }
 
 // -------------------------------------------------------------------------------
@@ -1152,6 +1195,13 @@ inline vec2i
 Vec2I(vec2 V_F)
 {
     vec2i Result = Vec2I((i32) V_F.X, (i32) V_F.Y);
+    return Result;
+}
+
+inline vec2
+Vec2(vec2i V_I)
+{
+    vec2 Result = Vec2((f32) V_I.X, (f32) V_I.Y);
     return Result;
 }
 

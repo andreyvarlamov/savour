@@ -379,7 +379,14 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, platform_ima
 {
     game_state *GameState = (game_state *) GameMemory->Storage;
 
-    b32 InitialPlayerPositionReset = false;
+    local_persist i32 TileMinX = 0;
+    local_persist i32 TileMaxX = 0;
+    local_persist i32 TileMinY = 0;
+    local_persist i32 TileMaxY = 0;
+
+    local_persist vec3i ChunkMin = Vec3I();
+    local_persist vec3i ChunkMax = Vec3I();
+
     if (!GameMemory->IsInitialized)
     {
         // TODO: Temporary
@@ -391,15 +398,38 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, platform_ima
         GameState->FontAtlas.GlyphPxWidth = 48;
         GameState->FontAtlas.GlyphPxHeight = 72;
 
+        GameState->CameraZoomMin = 0.2f;
+        GameState->CameraZoomMax = 10.0f;
+        GameState->CameraZoomLogNeutral = ExponentialInterpolationWhereIs(GameState->CameraZoomMin, GameState->CameraZoomMax, 1.0f);
+        
+        GameState->CameraZoomLogCurrent = 0.3f;
+        GameState->CameraZoomIsInitial = true;
+
+        GameState->CameraTileOffsetMax = 32.0f;
+
+        f32 CameraZoomCurrent = ExponentialInterpolation(GameState->CameraZoomMin, GameState->CameraZoomMax, GameState->CameraZoomLogCurrent);
+        GameState->TileDim = Vec2I(GameState->FontAtlas.GlyphPxWidth, GameState->FontAtlas.GlyphPxHeight) * CameraZoomCurrent;
+
         GameState->ChunkDim = Vec3I(16,16,1);
         
-        vec3i InitialPosition = Vec3I();
-        vec3i InitialChunkPosition = GetChunkPFromTileP(InitialPosition, GameState->ChunkDim);
+        vec3i PlayerInitialPosition = Vec3I();
 
-        vec3i InViewMinChunkX = InitialPosition;
-        // InViewMinChunkX -= 
+        f32 ScreenHalfWidthInTiles = ((f32) OffscreenBuffer->Width * 0.5f) / (f32) GameState->TileDim.X;
+        f32 ScreenHalfHeightInTiles = ((f32) OffscreenBuffer->Height * 0.5f) / (f32) GameState->TileDim.Y;
+
+        printf("TileDim(%d, %d); ", GameState->TileDim.X, GameState->TileDim.Y);
+        printf("ScreenHalfWidthInTiles(%0.3f, %0.3f); ", ScreenHalfWidthInTiles, ScreenHalfHeightInTiles);
+
+        TileMinX = PlayerInitialPosition.X + (i32) FloorF(-ScreenHalfWidthInTiles);
+        TileMaxX = PlayerInitialPosition.X + (i32) CeilingF(ScreenHalfWidthInTiles);
+        TileMinY = PlayerInitialPosition.Y + (i32) FloorF(-ScreenHalfHeightInTiles);
+        TileMaxY = PlayerInitialPosition.Y + (i32) CeilingF(ScreenHalfHeightInTiles);
+        printf("TileMin(%d, %d); TileMax(%d, %d); ", TileMinX, TileMinY, TileMaxX, TileMaxY);
+
+        ChunkMin = GetChunkPFromTileP(Vec3I(TileMinX, TileMinY, 0), GameState->ChunkDim);
+        ChunkMax = GetChunkPFromTileP(Vec3I(TileMaxX, TileMaxY, 0), GameState->ChunkDim);
+        printf("ChunkMin(%d, %d); ChunkMax(%d, %d)\n", ChunkMin.X, ChunkMin.Y, ChunkMax.X, ChunkMax.Y);
         
-
         #if 0
         for (i32 MapI = 0;
              MapI < GameState->MapWidth * GameState->MapHeight;
@@ -466,27 +496,18 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, platform_ima
         }
         #endif
 
-        GameState->CameraZoomMin = 0.2f;
-        GameState->CameraZoomMax = 10.0f;
-        GameState->CameraZoomLogNeutral = ExponentialInterpolationWhereIs(GameState->CameraZoomMin, GameState->CameraZoomMax, 1.0f);
-        
-        GameState->CameraZoomLogCurrent = 1.0f;
-        GameState->CameraZoomIsInitial = true;
-
         // NOTE: Create player entity
         {
-            GameState->Player.P = InitialPosition;
+            GameState->Player.P = PlayerInitialPosition;
             GameState->Player.Glyph = '@';
             GameState->Player.ForegroundColor = Vec3(0);
             GameState->Player.BackgroundColor = Vec3(0,0,1);
             GameState->Player.IsBlocking = true;
             GameState->Player.IsOpaque = false;
-
-            InitialPlayerPositionReset = true;
         }
 
         {
-            GameState->OtherEntity.P = InitialPosition + Vec3I(3, 3, 0);
+            GameState->OtherEntity.P = PlayerInitialPosition + Vec3I(3, 3, 0);
             GameState->OtherEntity.Glyph = 'A';
             GameState->OtherEntity.ForegroundColor = Vec3(0);
             GameState->OtherEntity.BackgroundColor = Vec3(0,1,0);
@@ -559,18 +580,6 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, platform_ima
     }
     #endif
 
-    if (Platform_MouseButtonIsDown(GameInput, MouseButton_Middle))
-    {
-        GameState->CameraOffset.X += GameInput->MouseLogicalDeltaX;
-        GameState->CameraOffset.Y -= GameInput->MouseLogicalDeltaY;
-    }
-    
-    if (PlayerMoved)
-    {
-        GameState->CameraOffset.X = 0.0f;
-        GameState->CameraOffset.Y = 0.0f;
-    }
-
     f32 LogZoomPerSecond = 1.0f;
     if (Platform_KeyIsDown(GameInput, SDL_SCANCODE_PAGEUP))
     {
@@ -626,6 +635,39 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, platform_ima
     }
 
     f32 CameraZoomCurrent = ExponentialInterpolation(GameState->CameraZoomMin, GameState->CameraZoomMax, GameState->CameraZoomLogCurrent);
+    GameState->TileDim = Vec2I(GameState->FontAtlas.GlyphPxWidth, GameState->FontAtlas.GlyphPxHeight) * CameraZoomCurrent;
+
+    if (Platform_MouseButtonIsDown(GameInput, MouseButton_Middle))
+    {
+        GameState->CameraTileOffset.X += GameInput->MouseLogicalDeltaX / (f32) GameState->TileDim.X;
+        GameState->CameraTileOffset.Y -= GameInput->MouseLogicalDeltaY / (f32) GameState->TileDim.Y;
+        GameState->CameraTileOffset = VecClamp(GameState->CameraTileOffset, GameState->CameraTileOffsetMax);
+    }
+    
+    if (PlayerMoved)
+    {
+        GameState->CameraTileOffset.X = 0.0f;
+        GameState->CameraTileOffset.Y = 0.0f;
+    }
+    
+    f32 ScreenHalfWidthInTiles = ((f32) OffscreenBuffer->Width * 0.5f) / (f32) GameState->TileDim.X;
+    f32 ScreenHalfHeightInTiles = ((f32) OffscreenBuffer->Height * 0.5f) / (f32) GameState->TileDim.Y;
+
+    printf("TileDim(%d, %d); ", GameState->TileDim.X, GameState->TileDim.Y);
+    printf("ScreenHalfWidthInTiles(%0.3f, %0.3f); ", ScreenHalfWidthInTiles, ScreenHalfHeightInTiles);
+
+    vec3i InitialPosition = GameState->Player.P;
+    TileMinX = InitialPosition.X + (i32) FloorF(-ScreenHalfWidthInTiles);
+    TileMaxX = InitialPosition.X + (i32) CeilingF(ScreenHalfWidthInTiles);
+    TileMinY = InitialPosition.Y + (i32) FloorF(-ScreenHalfHeightInTiles);
+    TileMaxY = InitialPosition.Y + (i32) CeilingF(ScreenHalfHeightInTiles);
+    printf("TileMin(%d, %d); TileMax(%d, %d)", TileMinX, TileMinY, TileMaxX, TileMaxY);
+
+    ChunkMin = GetChunkPFromTileP(Vec3I(TileMinX, TileMinY, 0), GameState->ChunkDim);
+    ChunkMax = GetChunkPFromTileP(Vec3I(TileMaxX, TileMaxY, 0), GameState->ChunkDim);
+    printf("ChunkMin(%d, %d); ChunkMax(%d, %d)\n", ChunkMin.X, ChunkMin.Y, ChunkMax.X, ChunkMax.Y);
+
+    // printf("TileDim(%d,%d); CameraTileOffset(%0.5f,%0.5f)\n", GameState->TileDim.X, GameState->TileDim.Y, GameState->CameraTileOffset.X, GameState->CameraTileOffset.Y);
 
     //
     // NOTE: RENDER
@@ -636,15 +678,14 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, platform_ima
     ScreenImage.Width = OffscreenBuffer->Width;
     ScreenImage.Height = OffscreenBuffer->Height;
     
-    vec2i TileDim = Vec2I(GameState->FontAtlas.GlyphPxWidth, GameState->FontAtlas.GlyphPxHeight) * CameraZoomCurrent;
-    vec2i TileHalfDim = TileDim * 0.5f;
+    vec2i TileHalfDim = GameState->TileDim * 0.5f;
     vec2i ScreenHalfDim = Vec2I(ScreenImage.Width, ScreenImage.Height) * 0.5f;
-    vec2i CameraPxOffset = Vec2I(GameState->CameraOffset);
+    vec2i CameraPxOffset = Vec2I(GameState->CameraTileOffset * Vec2(GameState->TileDim));
     vec2i AllCameraOffsets = ScreenHalfDim - TileHalfDim + CameraPxOffset;
 
     rect DestRect = {};
-    DestRect.Width = TileDim.X;
-    DestRect.Height = TileDim.Y;
+    DestRect.Width = GameState->TileDim.X;
+    DestRect.Height = GameState->TileDim.Y;
 
     // TODO: Cull unseen entities on the level of selecting chunks to draw, or even tiles to draw
     entity *Entities[] = { &GameState->Player, &GameState->OtherEntity };
@@ -654,9 +695,67 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, platform_ima
     {
         entity *Entity = Entities[I];
 
-        vec2i EntityRelPxP = (Vec2I(Entity->P) - Vec2I(GameState->CameraCenterTile)) * TileDim + AllCameraOffsets;
+        vec2i EntityRelPxP = (Vec2I(Entity->P) - Vec2I(GameState->CameraCenterTile)) * GameState->TileDim + AllCameraOffsets;
         DestRect.X = EntityRelPxP.X;
         DestRect.Y = EntityRelPxP.Y;
         RenderGlyph(GameState->FontAtlas, Entity->Glyph, ScreenImage, DestRect, Entity->BackgroundColor, Entity->ForegroundColor);
     }
+
+    vec3i *Chunks[] = { &ChunkMin, &ChunkMax };
+
+    for (u32 I = 0;
+         I < ArrayCount(Chunks);
+         ++I)
+    {
+        vec3i Min = GetLeftmostTilePFromChunkP(*Chunks[I], GameState->ChunkDim);
+        vec3i Max = Min + GameState->ChunkDim;
+
+        for (i32 Y = Min.Y;
+             Y < Max.Y;
+             ++Y)
+        {
+            for (i32 X = Min.X;
+                 X < Max.X;
+                 ++X)
+            {
+                vec2i EntityRelPxP = (Vec2I(X, Y) - Vec2I(GameState->CameraCenterTile)) * GameState->TileDim + AllCameraOffsets;
+                DestRect.X = EntityRelPxP.X;
+                DestRect.Y = EntityRelPxP.Y;
+                RenderGlyph(GameState->FontAtlas, '+', ScreenImage, DestRect, Vec3(0,0,1), Vec3(0,1,0));
+            }
+        }
+    }
+
+    for (i32 X = TileMinX;
+         X <= TileMaxX;
+         ++X)
+    {
+        vec2i EntityRelPxP = (Vec2I(X, TileMinY) - Vec2I(GameState->CameraCenterTile)) * GameState->TileDim + AllCameraOffsets;
+        DestRect.X = EntityRelPxP.X;
+        DestRect.Y = EntityRelPxP.Y;
+        RenderGlyph(GameState->FontAtlas, '#', ScreenImage, DestRect, Vec3(1), Vec3(0));
+
+        EntityRelPxP = (Vec2I(X, TileMaxY) - Vec2I(GameState->CameraCenterTile)) * GameState->TileDim + AllCameraOffsets;
+        DestRect.X = EntityRelPxP.X;
+        DestRect.Y = EntityRelPxP.Y;
+        RenderGlyph(GameState->FontAtlas, '#', ScreenImage, DestRect, Vec3(1), Vec3(0));
+
+    }
+
+    for (i32 Y = TileMinY;
+         Y <= TileMaxY;
+         ++Y)
+    {
+        vec2i EntityRelPxP = (Vec2I(TileMinX, Y) - Vec2I(GameState->CameraCenterTile)) * GameState->TileDim + AllCameraOffsets;
+        DestRect.X = EntityRelPxP.X;
+        DestRect.Y = EntityRelPxP.Y;
+        RenderGlyph(GameState->FontAtlas, '#', ScreenImage, DestRect, Vec3(1), Vec3(0));
+
+        EntityRelPxP = (Vec2I(TileMaxX, Y) - Vec2I(GameState->CameraCenterTile)) * GameState->TileDim + AllCameraOffsets;
+        DestRect.X = EntityRelPxP.X;
+        DestRect.Y = EntityRelPxP.Y;
+        RenderGlyph(GameState->FontAtlas, '#', ScreenImage, DestRect, Vec3(1), Vec3(0));
+
+    }
+
 }

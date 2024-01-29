@@ -84,8 +84,11 @@ struct game_state
     entity Player;
     entity OtherEntity;
 
+    vec2i TileDim;
+
     vec3i CameraCenterTile;
-    vec2 CameraOffset;
+    vec2 CameraTileOffset;
+    f32 CameraTileOffsetMax;
 
     f32 CameraZoomMin;
     f32 CameraZoomMax;
