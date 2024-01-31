@@ -51,7 +51,7 @@ int main(int argc, char **argv)
     GameInput->KeyRepeatDelay_ = 0.2f;
     GameInput->KeyRepeatPeriod_ = 0.09f;
     game_memory GameMemory = {};
-    GameMemory.StorageSize = Megabytes(64);
+    GameMemory.StorageSize = Megabytes(128);
     GameMemory.Storage = calloc(1, GameMemory.StorageSize);
     Assert(GameMemory.Storage);
 
@@ -191,10 +191,10 @@ void
 Platform_SaveRGBA_BMP(platform_image *PlatformImage, const char *Name, b32 Timestamp)
 {
     SDL_Surface *TestPerlinSurface = SDL_CreateRGBSurfaceFrom((void *) PlatformImage->ImageData,
-                                                              10240,
-                                                              10240,
+                                                              PlatformImage->Width,
+                                                              PlatformImage->Height,
                                                               32, // depth in bits
-                                                              10240 * 4, // pitch in bytes
+                                                              PlatformImage->Width * 4, // pitch in bytes
                                                               0xFF000000, 0x00FF0000, 0x0000FF00, 0x000000FF);
 
     char Path[256];

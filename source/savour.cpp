@@ -420,6 +420,80 @@ GetFreeEntity(game_state *GameState)
 }
 
 void
+DebugMap(memory_arena *TransientArena, i32 MinX, i32 MinY, i32 MaxX, i32 MaxY,
+         platform_image *Out_ContinentalPerlin, platform_image *Out_TerrainPerlin, platform_image *Out_MapImage)
+{
+    u32 Width = MaxX - MinX + 1;
+    u32 Height = MaxY - MinY + 1;
+    Out_ContinentalPerlin->Width = Width;
+    Out_ContinentalPerlin->Height = Height;
+    Out_TerrainPerlin->Width = Width;
+    Out_TerrainPerlin->Height = Height;
+    Out_MapImage->Width = Width;
+    Out_MapImage->Height = Height;
+
+    Out_ContinentalPerlin->ImageData = (void *) MemoryArena_PushArray(TransientArena, Width * Height, u32);
+    Out_TerrainPerlin->ImageData = (void *) MemoryArena_PushArray(TransientArena, Width * Height, u32);
+    Out_MapImage->ImageData = (void *) MemoryArena_PushArray(TransientArena, Width * Height, u32);
+
+    u32 *ContinentalP = (u32 *) Out_ContinentalPerlin->ImageData;
+    u32 *TerrainP = (u32 *) Out_TerrainPerlin->ImageData;
+    u32 *MapP = (u32 *) Out_MapImage->ImageData;
+    for (i32 Y = MinY;
+         Y <= MaxY;
+         ++Y)
+    {
+        for (i32 X = MinX;
+             X <= MaxX;
+             ++X)
+        {
+            // f32 ContinentalIntensity = PerlinSampleOctaves(X / 256.0f, Y / 256.0f, 1.3f, 0.3f, 4, 100);
+            f32 ContinentalIntensity = PerlinSampleOctaves(X / 256.0f, Y / 256.0f, 2.1f, 0.3f, 4, 100) * 2.0f - 0.3f;
+            ContinentalIntensity = PerlinNormalize(ContinentalIntensity);
+
+            u8 ContinentalByte = (u8) (ContinentalIntensity * 255.0f);
+            *ContinentalP++ = (ContinentalByte << 24 |
+                           ContinentalByte << 16 |
+                           ContinentalByte << 8  |
+                           255);
+
+
+            f32 Intensity = PerlinSampleOctaves(X / 32.0f, Y / 32.0f, 1.8f, 0.5f, 6, 101);
+            Intensity = PerlinNormalize(Intensity);
+
+            u8 TerrainByte = (u8) (Intensity * 255.0f);
+            *TerrainP++ = (TerrainByte << 24 |
+                           TerrainByte << 16 |
+                           TerrainByte << 8  |
+                           255);
+
+            if (ContinentalIntensity < 0.5f || Intensity <= 0.4f)
+            {
+                // NOTE: Water
+                *MapP = 0x0000FFFF;
+            }
+            else if (Intensity >= 0.6f)
+            {
+                // NOTE: Mountain
+                *MapP = 0xAAAAAAFF;
+            }
+            else
+            {
+                // NOTE: Grass
+                *MapP = 0x00FF00FF;
+            }
+
+            if (X == 0 && Y == 0)
+            {
+                *MapP = 0x000000FF;
+            }
+
+            *MapP++;
+        }
+    }
+}
+
+void
 GenerateChunkTerrain(vec3i ChunkP, game_state *GameState, memory_arena *WorldArena)
 {
     local_persist i32 CurrentIndex = 0;
@@ -442,6 +516,9 @@ GenerateChunkTerrain(vec3i ChunkP, game_state *GameState, memory_arena *WorldAre
         
         vec3i Position = GetLeftmostTilePFromChunkP(ChunkP, GameState->ChunkDim) + Vec3I(X, Y, Z);
 
+        f32 ContinentalIntensity = PerlinSampleOctaves(Position.X / 256.0f, Position.Y / 256.0f, 1.3f, 0.3f, 4, 100);
+        ContinentalIntensity = PerlinNormalize(ContinentalIntensity);
+
         f32 Intensity = PerlinSampleOctaves(Position.X / 32.0f, Position.Y / 32.0f, 1.8f, 0.5f, 6, 101);
         Intensity = PerlinNormalize(Intensity);
 
@@ -453,7 +530,7 @@ GenerateChunkTerrain(vec3i ChunkP, game_state *GameState, memory_arena *WorldAre
         TopEntity->IsBlocking = false;
         TopEntity->IsOpaque = false;
 
-        if (Intensity <= 0.4f)
+        if (ContinentalIntensity < 0.5f || Intensity <= 0.4f)
         {
             // NOTE: Water
             entity *OldTop = TopEntity;
@@ -505,7 +582,18 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, platform_ima
         size_t RootArenaSize = GameMemory->StorageSize - sizeof(game_state);
         GameState->RootArena = MemoryArena(RootArenaBase, RootArenaSize);
 
+        GameState->TransientArena = MemoryArenaNested(&GameState->RootArena, Megabytes(64));
         GameState->WorldArena = MemoryArenaNested(&GameState->RootArena, Megabytes(4));
+
+        // Generate and save map preview
+        platform_image ContinentalPerlin;
+        platform_image TerrainPerlin;
+        platform_image MapImage;
+        DebugMap(&GameState->TransientArena, -512, -512, 512, 512,
+                         &ContinentalPerlin, &TerrainPerlin, &MapImage);
+        Platform_SaveRGBA_BMP(&ContinentalPerlin, "continental", true);
+        Platform_SaveRGBA_BMP(&TerrainPerlin, "terrain", true);
+        Platform_SaveRGBA_BMP(&MapImage, "map", true);
         
         // TODO: Temporary
         srand((u32)time(NULL));
@@ -528,7 +616,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, platform_ima
 
         f32 CameraZoomCurrent = ExponentialInterpolation(GameState->CameraZoomMin, GameState->CameraZoomMax, GameState->CameraZoomLogCurrent);
         GameState->TileDim = Vec2I(GameState->FontAtlas.GlyphPxWidth, GameState->FontAtlas.GlyphPxHeight) * CameraZoomCurrent;
-        GameState->TileDimForTest = Vec2I(GameState->FontAtlas.GlyphPxWidth, GameState->FontAtlas.GlyphPxHeight);// * ExponentialInterpolation(GameState->CameraZoomMin, GameState->CameraZoomMax, 0.0f);
+        GameState->TileDimForTest = Vec2I(GameState->FontAtlas.GlyphPxWidth, GameState->FontAtlas.GlyphPxHeight) * ExponentialInterpolation(GameState->CameraZoomMin, GameState->CameraZoomMax, 0.0f);
 
         // NOTE: Initialize first chunks
         GameState->ChunkDim = Vec3I(16,16,1);
@@ -580,26 +668,51 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, platform_ima
     
     b32 PlayerMoved = false;
     vec3i NewPlayerPosition = GameState->Player.P;
-    if (Platform_KeyRepeat(GameInput, SDL_SCANCODE_H))
+    if (Platform_KeyRepeat(GameInput, SDL_SCANCODE_A))
     {
         NewPlayerPosition.X--;
         PlayerMoved = true;
     }
-    if (Platform_KeyRepeat(GameInput, SDL_SCANCODE_L))
+    if (Platform_KeyRepeat(GameInput, SDL_SCANCODE_D))
     {
         NewPlayerPosition.X++;
         PlayerMoved = true;
     }
-    if (Platform_KeyRepeat(GameInput, SDL_SCANCODE_K))
+    if (Platform_KeyRepeat(GameInput, SDL_SCANCODE_W))
     { 
         NewPlayerPosition.Y++;
         PlayerMoved = true;
     }
-    if (Platform_KeyRepeat(GameInput, SDL_SCANCODE_J))
+    if (Platform_KeyRepeat(GameInput, SDL_SCANCODE_S))
     {
         NewPlayerPosition.Y--;
         PlayerMoved = true;
     }
+    if (Platform_KeyRepeat(GameInput, SDL_SCANCODE_Q))
+    {
+        NewPlayerPosition.X--;
+        NewPlayerPosition.Y++;
+        PlayerMoved = true;
+    }
+    if (Platform_KeyRepeat(GameInput, SDL_SCANCODE_E))
+    {
+        NewPlayerPosition.X++;
+        NewPlayerPosition.Y++;
+        PlayerMoved = true;
+    }
+    if (Platform_KeyRepeat(GameInput, SDL_SCANCODE_Z))
+    {
+        NewPlayerPosition.X--;
+        NewPlayerPosition.Y--;
+        PlayerMoved = true;
+    }
+    if (Platform_KeyRepeat(GameInput, SDL_SCANCODE_C))
+    {
+        NewPlayerPosition.X++;
+        NewPlayerPosition.Y--;
+        PlayerMoved = true;
+    }
+
     GameState->Player.P = NewPlayerPosition;
     GameState->CameraCenterTile = GameState->Player.P;
     if (PlayerMoved)

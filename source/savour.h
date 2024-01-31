@@ -74,6 +74,7 @@ struct game_state
 {
     memory_arena RootArena;
     memory_arena WorldArena;
+    memory_arena TransientArena;
     
     font_atlas FontAtlas;
     b32 IsBilinear;
